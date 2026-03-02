@@ -257,23 +257,37 @@ const fmtUsd = (n: number) => `$${n.toLocaleString("en-US", { maximumFractionDig
 const fmtPrice = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 
 function resolveMarketValue(pos: PortfolioPosition): number | null {
+  // For multi-leg positions, always recompute sign-aware from legs
+  if (pos.legs.length > 1) {
+    const known = pos.legs.filter((l) => l.market_value != null);
+    if (known.length === 0) return null;
+    return known.reduce((s, l) => {
+      const sign = l.direction === "LONG" ? 1 : -1;
+      return s + sign * Math.abs(l.market_value!);
+    }, 0);
+  }
   if (pos.market_value != null) return pos.market_value;
-  // Fallback: sum leg market values when position-level is null (sign-aware)
-  const known = pos.legs.filter((l) => l.market_value != null);
-  if (known.length === 0) return null;
-  return known.reduce((s, l) => {
-    const sign = l.direction === "LONG" ? 1 : -1;
-    return s + sign * l.market_value!;
-  }, 0);
+  const single = pos.legs[0];
+  return single?.market_value ?? null;
 }
 
 function getMultiplier(pos: PortfolioPosition): number {
   return pos.structure_type === "Stock" ? 1 : 100;
 }
 
+function resolveEntryCost(pos: PortfolioPosition): number {
+  if (pos.legs.length > 1) {
+    return pos.legs.reduce((s, l) => {
+      const sign = l.direction === "LONG" ? 1 : -1;
+      return s + sign * Math.abs(l.entry_cost);
+    }, 0);
+  }
+  return pos.entry_cost;
+}
+
 function getAvgEntry(pos: PortfolioPosition): number {
   const mult = getMultiplier(pos);
-  return pos.entry_cost / (pos.contracts * mult);
+  return resolveEntryCost(pos) / (pos.contracts * mult);
 }
 
 function getLastPrice(pos: PortfolioPosition): number | null {
@@ -285,8 +299,9 @@ function getLastPrice(pos: PortfolioPosition): number | null {
 
 function PositionRow({ pos }: { pos: PortfolioPosition }) {
   const mv = resolveMarketValue(pos);
-  const pnl = mv != null ? mv - pos.entry_cost : null;
-  const pnlPct = pnl != null && pos.entry_cost !== 0 ? (pnl / Math.abs(pos.entry_cost)) * 100 : null;
+  const entryCost = resolveEntryCost(pos);
+  const pnl = mv != null ? mv - entryCost : null;
+  const pnlPct = pnl != null && entryCost !== 0 ? (pnl / Math.abs(entryCost)) * 100 : null;
   const avgEntry = getAvgEntry(pos);
   const lastPrice = getLastPrice(pos);
 
@@ -302,7 +317,7 @@ function PositionRow({ pos }: { pos: PortfolioPosition }) {
         </td>
         <td className="right">{fmtPrice(avgEntry)}</td>
         <td className="right">{lastPrice != null ? fmtPrice(lastPrice) : "—"}</td>
-        <td className="right">{fmtUsd(pos.entry_cost)}</td>
+        <td className="right">{fmtUsd(entryCost)}</td>
         <td className="right">{mv != null ? fmtUsd(mv) : "—"}</td>
         <td className={`right ${pnl != null ? (pnl >= 0 ? "positive" : "negative") : ""}`}>
           {pnl != null ? `${pnl >= 0 ? "+" : ""}${fmtUsd(Math.abs(pnl))} (${pnlPct!.toFixed(1)}%)` : "—"}
@@ -317,8 +332,8 @@ function PositionRow({ pos }: { pos: PortfolioPosition }) {
           </td>
           <td className="right" style={{ opacity: 0.7, fontSize: "0.85em" }}>{fmtPrice(Math.abs(leg.avg_cost) / (leg.type === "Stock" ? 1 : 100))}</td>
           <td className="right" style={{ opacity: 0.7, fontSize: "0.85em" }}>{leg.market_price != null ? fmtPrice(Math.abs(leg.market_price)) : "—"}</td>
-          <td className="right" style={{ opacity: 0.7, fontSize: "0.85em" }}>{fmtUsd(leg.entry_cost)}</td>
-          <td className="right" style={{ opacity: 0.7, fontSize: "0.85em" }}>{leg.market_value != null ? fmtUsd(leg.market_value) : "—"}</td>
+          <td className="right" style={{ opacity: 0.7, fontSize: "0.85em" }}>{fmtUsd(Math.abs(leg.entry_cost))}</td>
+          <td className="right" style={{ opacity: 0.7, fontSize: "0.85em" }}>{leg.market_value != null ? fmtUsd(Math.abs(leg.market_value)) : "—"}</td>
           <td></td>
           <td></td>
         </tr>
@@ -337,9 +352,9 @@ const positionExtract = (pos: PortfolioPosition, key: PositionSortKey): string |
     case "direction": return pos.direction;
     case "avg_entry": return getAvgEntry(pos);
     case "last_price": return getLastPrice(pos);
-    case "entry_cost": return pos.entry_cost;
+    case "entry_cost": return resolveEntryCost(pos);
     case "market_value": return mv;
-    case "pnl": return mv != null ? mv - pos.entry_cost : null;
+    case "pnl": return mv != null ? mv - resolveEntryCost(pos) : null;
     case "expiry": return pos.expiry === "N/A" ? null : pos.expiry;
     default: return null;
   }

@@ -24,9 +24,8 @@ export default function WorkspaceShell({ section }: WorkspaceShellProps) {
   const activeSection: WorkspaceSection = section ?? resolveSectionFromPath(pathname, "dashboard");
   const activeLabel = navItems.find((item) => item.route === activeSection)?.label ?? "Dashboard";
   const { data: portfolio, syncing: portfolioSyncing, error: portfolioError, lastSync: portfolioLastSync, syncNow: portfolioSyncNow } = usePortfolio();
-  const { data: orders, syncing: ordersSyncing, error: ordersError, lastSync: ordersLastSync, syncNow: ordersSyncNow } = useOrders();
-
   const isOrdersPage = activeSection === "orders";
+  const { data: orders, syncing: ordersSyncing, error: ordersError, lastSync: ordersLastSync, syncNow: ordersSyncNow } = useOrders(isOrdersPage);
   const syncing = isOrdersPage ? ordersSyncing : portfolioSyncing;
   const error = isOrdersPage ? ordersError : portfolioError;
   const lastSync = isOrdersPage ? ordersLastSync : portfolioLastSync;

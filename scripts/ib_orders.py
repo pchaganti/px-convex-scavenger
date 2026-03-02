@@ -19,6 +19,7 @@ import math
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Optional
 
 try:
     from ib_insync import IB
@@ -83,7 +84,7 @@ def serialize_contract(contract) -> dict:
     }
 
 
-def safe_float(value) -> float | None:
+def safe_float(value) -> Optional[float]:
     """Convert IB value to float, filtering sentinel values"""
     if value is None:
         return None
@@ -97,7 +98,9 @@ def safe_float(value) -> float | None:
 
 
 def fetch_open_orders(ib: IB) -> list:
-    """Fetch open orders via openTrades()"""
+    """Fetch open orders from all clients"""
+    ib.reqAllOpenOrders()
+    ib.sleep(1)
     trades = ib.openTrades()
     orders = []
 

@@ -14,28 +14,14 @@ type UseOrdersReturn = {
   syncNow: () => void;
 };
 
-export function useOrders(): UseOrdersReturn {
+export function useOrders(active: boolean): UseOrdersReturn {
   const [data, setData] = useState<OrdersData | null>(null);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastSync, setLastSync] = useState<string | null>(null);
   const intervalRef = useRef<ReturnType<typeof setInterval> | null>(null);
-
-  const fetchOrders = useCallback(async () => {
-    try {
-      const res = await fetch("/api/orders");
-      if (!res.ok) throw new Error("Failed to fetch orders");
-      const json = (await res.json()) as OrdersData;
-      setData(json);
-      setLastSync(json.last_sync || null);
-      setError(null);
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unknown error");
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const didInitialSync = useRef(false);
 
   const triggerSync = useCallback(async () => {
     setSyncing(true);
@@ -60,11 +46,44 @@ export function useOrders(): UseOrdersReturn {
     void triggerSync();
   }, [triggerSync]);
 
+  // Initial fetch — read cached file, auto-sync if empty
   useEffect(() => {
-    void fetchOrders();
-  }, [fetchOrders]);
+    if (!active) return;
 
+    const init = async () => {
+      try {
+        const res = await fetch("/api/orders");
+        if (!res.ok) throw new Error("Failed to fetch orders");
+        const json = (await res.json()) as OrdersData;
+        setData(json);
+        setLastSync(json.last_sync || null);
+        setError(null);
+        setLoading(false);
+
+        // No cached data — trigger immediate sync
+        if (!json.last_sync && !didInitialSync.current) {
+          didInitialSync.current = true;
+          void triggerSync();
+        }
+      } catch (err) {
+        setError(err instanceof Error ? err.message : "Unknown error");
+        setLoading(false);
+      }
+    };
+
+    void init();
+  }, [active, triggerSync]);
+
+  // Auto-sync interval (only when active)
   useEffect(() => {
+    if (!active) {
+      if (intervalRef.current) {
+        clearInterval(intervalRef.current);
+        intervalRef.current = null;
+      }
+      return;
+    }
+
     intervalRef.current = setInterval(() => {
       void triggerSync();
     }, SYNC_INTERVAL_MS);
@@ -72,7 +91,7 @@ export function useOrders(): UseOrdersReturn {
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [triggerSync]);
+  }, [active, triggerSync]);
 
   return { data, loading, syncing, error, lastSync, syncNow };
 }
