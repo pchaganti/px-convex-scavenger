@@ -14,6 +14,22 @@ export default function (pi: ExtensionAPI) {
       bankroll: Type.Optional(Type.Number({ description: "Current bankroll in dollars" })),
     }),
     async execute({ prob_win, odds, fraction = 0.25, bankroll }) {
+      // Guard against invalid inputs that would cause division by zero or nonsensical results
+      if (odds <= 0) {
+        const result: Record<string, any> = {
+          full_kelly_pct: 0,
+          fractional_kelly_pct: 0,
+          edge_exists: false,
+          recommendation: "DO NOT BET",
+        };
+        if (bankroll) {
+          result.dollar_size = 0;
+          result.max_per_position = +(bankroll * 0.025).toFixed(2);
+          result.use_size = 0;
+        }
+        return JSON.stringify(result, null, 2);
+      }
+
       const q = 1 - prob_win;
       const fullKelly = prob_win - q / odds;
       const fracKelly = fullKelly * fraction;

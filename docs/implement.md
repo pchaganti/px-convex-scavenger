@@ -30,7 +30,8 @@
 
 ### 5. Continuous Documentation
 - Update `docs/status.md` after each evaluation
-- Log all decisions (TRADE and NO_TRADE) to trade_log.json
+- Log EXECUTED trades only to trade_log.json (with full details)
+- Log NO_TRADE decisions to docs/status.md (Recent Evaluations section)
 - Include timestamp, ticker, decision, and rationale
 
 ### 6. Verification Commands

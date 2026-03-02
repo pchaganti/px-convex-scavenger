@@ -4,6 +4,16 @@ import argparse, json
 
 def kelly(prob_win: float, odds: float, fraction: float = 0.25) -> dict:
     """Calculate fractional Kelly bet size."""
+    # Guard against invalid inputs that would cause division by zero or nonsensical results
+    if odds <= 0:
+        return {
+            "full_kelly_pct": 0.0,
+            "fractional_kelly_pct": 0.0,
+            "fraction_used": fraction,
+            "edge_exists": False,
+            "recommendation": "DO NOT BET"
+        }
+    
     q = 1 - prob_win
     full_kelly = prob_win - (q / odds)
     frac_kelly = full_kelly * fraction

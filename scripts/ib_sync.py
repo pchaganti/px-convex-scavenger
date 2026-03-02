@@ -29,7 +29,7 @@ except ImportError:
 
 # Default connection settings
 DEFAULT_HOST = "127.0.0.1"
-DEFAULT_PORT = 7497  # TWS paper trading (7496 for live, 4001/4002 for Gateway)
+DEFAULT_PORT = 4001  # IB Gateway (7497=TWS paper, 7496=TWS live)
 DEFAULT_CLIENT_ID = 1
 
 PORTFOLIO_PATH = Path(__file__).parent.parent / "data" / "portfolio.json"
@@ -184,9 +184,8 @@ def collapse_positions(positions: list) -> list:
         
         # Calculate aggregate values
         total_entry_cost = sum(l['entry_cost'] for l in legs)
-        total_market_value = None
-        if all(l.get('marketValue') is not None for l in legs):
-            total_market_value = sum(l['marketValue'] for l in legs)
+        known_values = [l['marketValue'] for l in legs if l.get('marketValue') is not None]
+        total_market_value = sum(known_values) if known_values else None
         
         # Net contracts (for spreads, use the long leg count)
         long_legs = [l for l in legs if l['position'] > 0]
@@ -307,26 +306,32 @@ def fetch_positions(ib: IB) -> list:
 
 
 def fetch_market_prices(ib: IB, positions: list) -> list:
-    """Fetch current market prices for positions"""
+    """Fetch current market prices for positions (batched for speed)"""
+    # Qualify all contracts at once
+    contracts = [pos['contract'] for pos in positions]
+    ib.qualifyContracts(*contracts)
+
+    # Request all market data simultaneously
+    tickers = []
     for pos in positions:
-        contract = pos['contract']
-        ib.qualifyContracts(contract)
-        
-        # Request market data
-        ticker = ib.reqMktData(contract, '', False, False)
-        ib.sleep(1)  # Wait for data
-        
+        ticker = ib.reqMktData(pos['contract'], '', False, False)
+        tickers.append(ticker)
+
+    # Single sleep for all data to arrive
+    ib.sleep(3)
+
+    # Read results and cancel
+    for pos, ticker in zip(positions, tickers):
         if ticker.marketPrice() and not util.isNan(ticker.marketPrice()):
             pos['marketPrice'] = ticker.marketPrice()
-            pos['marketValue'] = round(ticker.marketPrice() * abs(pos['position']) * 
+            pos['marketValue'] = round(ticker.marketPrice() * abs(pos['position']) *
                                        (100 if pos['secType'] == 'OPT' else 1), 2)
         else:
             pos['marketPrice'] = None
             pos['marketValue'] = None
-        
-        ib.cancelMktData(contract)
+        ib.cancelMktData(pos['contract'])
         del pos['contract']  # Remove non-serializable contract object
-    
+
     return positions
 
 

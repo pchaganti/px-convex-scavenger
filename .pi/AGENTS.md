@@ -11,18 +11,87 @@
 | `journal` | View recent trade log entries |
 | `sync` | Pull live portfolio from Interactive Brokers |
 | `leap-scan [TICKERS]` | Scan for LEAP IV mispricing opportunities |
+| `seasonal [TICKERS]` | Seasonality assessment for one or more tickers |
+| `x-scan [@ACCOUNT]` | Fetch latest tweets and extract ticker sentiment |
 
 ## Evaluation Milestones
 
 Always follow in order. Stop immediately if a gate fails.
 
 1. **Validate Ticker** → `python3 scripts/fetch_ticker.py [TICKER]`
+1B. **Seasonality** → Fetch & analyze (does not affect score, but report in analysis)
 2. **Dark Pool Flow** → `python3 scripts/fetch_flow.py [TICKER]`
 3. **Options Flow** → `python3 scripts/fetch_options.py [TICKER]`
 4. **Edge Decision** → PASS/FAIL with reasoning (stop if FAIL)
 5. **Structure** → Design convex position (stop if R:R < 2:1)
 6. **Kelly Sizing** → Calculate + enforce caps
-7. **Log Decision** → Append to trade_log.json
+7. **Log Trade** → Append executed trades only to trade_log.json (NO_TRADE decisions go to status.md)
+
+## Seasonality Data
+
+Fetch monthly performance data from EquityClock:
+```bash
+curl -s -o /tmp/{TICKER}_sheet.png "https://charts.equityclock.com/seasonal_charts/{TICKER}_sheet.png"
+```
+
+**Rating Criteria:**
+| Rating | Win Rate | Avg Return |
+|--------|----------|------------|
+| FAVORABLE | >60% | >5% |
+| NEUTRAL | 50-60% | 0-5% |
+| UNFAVORABLE | <50% | <0% |
+
+Seasonality is CONTEXT, not a gate. Strong flow can override weak seasonality, but weak flow + weak seasonality = pass.
+
+## X Account Scan
+
+Fetch tweets from X accounts and extract ticker sentiment for watchlist.
+
+```bash
+# Scan default account (@aleabitoreddit)
+python3 scripts/fetch_x_watchlist.py
+
+# Scan specific account
+python3 scripts/fetch_x_watchlist.py --account elonmusk
+
+# Look back 48 hours instead of 24
+python3 scripts/fetch_x_watchlist.py --hours 48
+
+# Dry run (don't update watchlist)
+python3 scripts/fetch_x_watchlist.py --dry-run
+```
+
+**Requires:** `BROWSER_USE_API_KEY` environment variable
+
+**Startup Protocol:**
+- Extension checks watchlist for X account subcategories
+- If last scan >12 hours ago, notifies agent to run scan
+- Agent should run `x-scan` for any flagged accounts
+
+**Output:**
+- Extracts tickers mentioned in tweets
+- Determines sentiment: BULLISH / BEARISH / NEUTRAL
+- Rates confidence: HIGH / MEDIUM / LOW
+- Updates watchlist subcategory with new/updated tickers
+
+---
+
+## Seasonal Command
+
+Usage: `seasonal [TICKER]` or `seasonal [TICKER1] [TICKER2] ...`
+
+**Process:**
+1. Download chart: `curl -s -o /tmp/{TICKER}_sheet.png "https://charts.equityclock.com/seasonal_charts/{TICKER}_sheet.png"`
+2. Read image and extract monthly data table
+3. Identify current month and next 2-3 months
+4. Assign rating (FAVORABLE / NEUTRAL / UNFAVORABLE)
+5. Output summary table with actionable context
+
+**Output includes:**
+- Current month: win rate, avg return, max, min
+- Next 2-3 months outlook (for hold-through scenarios)
+- Best/worst months of year
+- Rating with reasoning
 
 ## Output Format
 
@@ -30,7 +99,8 @@ Always follow in order. Stop immediately if a gate fails.
 - State probability estimates explicitly, flag uncertainty
 - When a trade doesn't meet criteria, say so immediately with the failing gate
 - Never rationalize a bad trade
-- Log ALL decisions (TRADE and NO_TRADE)
+- Log EXECUTED trades to trade_log.json
+- Log NO_TRADE decisions to docs/status.md (Recent Evaluations section)
 
 ## Scripts
 
@@ -45,6 +115,7 @@ Always follow in order. Stop immediately if a gate fails.
 | `scripts/ib_sync.py` | Sync live portfolio from Interactive Brokers |
 | `scripts/leap_iv_scanner.py` | LEAP IV mispricing scanner (IB connection required) |
 | `scripts/leap_scanner_uw.py` | LEAP IV scanner using UW + Yahoo Finance (no IB needed) |
+| `scripts/fetch_x_watchlist.py` | Fetch X account tweets and extract ticker sentiment |
 
 ## Interactive Brokers Integration
 
@@ -100,7 +171,7 @@ See `docs/strategies.md` for full methodology.
 |------|---------|
 | `data/watchlist.json` | Tickers under surveillance with flow signals |
 | `data/portfolio.json` | Open positions, entry prices, Kelly sizes, expiry dates |
-| `data/trade_log.json` | Append-only decision journal (TRADE + NO_TRADE) |
+| `data/trade_log.json` | Executed trades only (append-only) |
 | `data/ticker_cache.json` | Local cache of ticker → company name mappings |
 
 ## Documentation
@@ -128,6 +199,7 @@ Skills are loaded on-demand when tasks match their descriptions.
 |-------|----------|---------|
 | `options-analysis` | `.pi/skills/options-analysis/SKILL.md` | Options pricing and structure analysis |
 | `web-fetch` | `.pi/skills/web-fetch/SKILL.md` | Fetch and extract content from websites |
+| `browser-use-cloud` | `.pi/skills/browser-use-cloud/SKILL.md` | AI browser agent for autonomous web tasks |
 | `html-report` | `.pi/skills/html-report/SKILL.md` | Generate styled HTML reports (Terminal theme) |
 | `context-engineering` | `.pi/skills/context-engineering/SKILL.md` | Persistent memory, context pipelines, token budget management |
 

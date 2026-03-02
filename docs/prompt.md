@@ -32,5 +32,5 @@ An evaluation is complete when:
 2. All three gates are evaluated in order
 3. Failing gate stops evaluation (no rationalization)
 4. Decision is logged with full rationale
-5. If TRADE: position added to portfolio.json
-6. If NO TRADE: reason documented in trade_log.json
+5. If TRADE: logged to trade_log.json + position synced to portfolio.json
+6. If NO TRADE: documented in docs/status.md (Recent Evaluations)

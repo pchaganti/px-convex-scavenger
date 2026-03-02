@@ -15,6 +15,24 @@ python3 scripts/fetch_ticker.py [TICKER]
 
 ---
 
+## Milestone 1B: Seasonality Analysis
+**Action**: Fetch and analyze historical monthly performance
+**Validation**:
+```bash
+# Download seasonality chart
+curl -s -o /tmp/{TICKER}_sheet.png "https://charts.equityclock.com/seasonal_charts/{TICKER}_sheet.png"
+# Then read the image for analysis
+```
+**Acceptance Criteria**:
+- Current month win rate extracted (% of years positive)
+- Current month average return extracted
+- Next 1-2 months assessed for hold-through scenarios
+- Seasonality rating assigned: FAVORABLE (>60% win rate, >5% avg) / NEUTRAL (50-60%) / UNFAVORABLE (<50%)
+**Output**: Seasonality does NOT change score but IS reported in analysis
+**Note**: Some tickers may not have data (newer IPOs, small caps). Flag as "NO DATA" and proceed.
+
+---
+
 ## Milestone 2: Dark Pool Flow Analysis
 **Action**: Fetch 5-day dark pool / OTC data
 **Validation**:
@@ -84,15 +102,21 @@ python3 scripts/kelly.py --prob [P] --odds [ODDS] --bankroll [B]
 ---
 
 ## Milestone 7: Final Decision & Log
-**Action**: Document decision in trade_log.json
-**Required Fields**:
-- timestamp
-- ticker
-- company_name (VERIFIED)
-- decision (TRADE / NO_TRADE)
-- failing_gate (if NO_TRADE)
-- edge_summary
-- structure (if TRADE)
-- kelly_math (if TRADE)
-- position_details (if TRADE)
-**Validation**: JSON schema valid, appended to log
+**Action**: Log executed trades to trade_log.json; log rejections to docs/status.md
+
+**If TRADE (executed)**:
+Log to `data/trade_log.json` with fields:
+- id (auto-increment)
+- date, time
+- ticker, company_name (VERIFIED)
+- action: "TRADE", decision: "EXECUTED"
+- contract, structure, fill_price, total_cost, contracts
+- pct_of_bankroll, max_risk
+- edge_analysis, kelly_calculation
+- gates_passed, thesis, target_exit, stop_loss, notes
+
+**If NO_TRADE (rejected)**:
+Log to `docs/status.md` under "Recent Evaluations" with:
+- ticker, date, failing_gate, reason
+
+**Validation**: JSON schema valid for trade_log.json

@@ -67,15 +67,21 @@ git clone https://github.com/YOUR_USER/convex-scavenger.git
 cd convex-scavenger
 ```
 
-### 2. Set your API key
+### 2. Set your API keys
 
-The `fetch_flow.py` script requires an Unusual Whales API token:
+The project requires API keys for data providers. Add these to your shell profile (`.zshrc`, `.bashrc`, etc.):
 
 ```bash
+# Unusual Whales — dark pool and options flow data
 export UW_TOKEN="your-unusual-whales-api-key"
+
+# Browser Use Cloud — AI browser agent for autonomous web scraping
+export BROWSER_USE_API_KEY="your-browser-use-api-key"
 ```
 
-Add this to your shell profile (`.zshrc`, `.bashrc`, etc.) to persist across sessions.
+Get your API keys:
+- **Unusual Whales**: [unusualwhales.com/account/api](https://unusualwhales.com/account/api)
+- **Browser Use Cloud**: [cloud.browser-use.com/settings](https://cloud.browser-use.com/settings?tab=api-keys)
 
 ### 3. Configure your options data source
 
@@ -201,8 +207,33 @@ PI skills are on-demand capabilities loaded when tasks match their descriptions.
 |-------|-----------------|---------|
 | `options-analysis` | "analyze options", "options chain", "IV analysis" | Options pricing and structure analysis |
 | `web-fetch` | "fetch website", "scrape page", "open URL" | Browser automation via agent-browser CLI |
+| `browser-use-cloud` | "autonomous browsing", "AI browser", "extract structured data" | Cloud AI agent for autonomous multi-step web tasks |
 | `html-report` | "generate report", "create HTML", "export dashboard" | Styled HTML reports using Terminal theme |
 | `context-engineering` | "persistent memory", "context pipeline", "token budget" | File-system context management for agent memory |
+
+### Browser Use Cloud
+
+For complex web tasks requiring AI reasoning (multi-step flows, structured extraction), the `browser-use-cloud` skill provides an autonomous browser agent:
+
+```python
+from browser_use_sdk.v3 import AsyncBrowserUse
+from pydantic import BaseModel
+
+class DarkPoolSummary(BaseModel):
+    ticker: str
+    buy_ratio: float
+    flow_direction: str
+
+client = AsyncBrowserUse()
+result = await client.run(
+    "Get dark pool summary for NVDA from unusualwhales.com",
+    output_schema=DarkPoolSummary
+)
+```
+
+**When to use which:**
+- `web-fetch` — Simple, deterministic automation (click this, fill that)
+- `browser-use-cloud` — Autonomous tasks requiring page understanding and structured output
 
 ### Context Engineering
 

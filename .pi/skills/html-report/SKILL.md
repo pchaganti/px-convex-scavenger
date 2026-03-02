@@ -20,7 +20,7 @@ See `THEME.md` in this skill directory for full design specification.
 
 ```html
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -28,7 +28,7 @@ See `THEME.md` in this skill directory for full design specification.
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
   <style>
-    /* Theme Tokens */
+    /* Theme Tokens - Dark mode default */
     :root {
       --bg-base: #050505;
       --bg-panel: #0A0A0A;
@@ -41,6 +41,22 @@ See `THEME.md` in this skill directory for full design specification.
       --accent-text: #000000;
     }
     
+    /* Auto-detect system light mode preference */
+    @media (prefers-color-scheme: light) {
+      :root:not([data-theme="dark"]) {
+        --bg-base: #F5F5F5;
+        --bg-panel: #FFFFFF;
+        --bg-hover: #F0F0F0;
+        --border-dim: #D9D9D9;
+        --border-focus: #A3A3A3;
+        --text-primary: #0A0A0A;
+        --text-muted: #6B6B6B;
+        --accent-bg: #000000;
+        --accent-text: #FFFFFF;
+      }
+    }
+
+    /* Manual override: explicit light mode */
     [data-theme="light"] {
       --bg-base: #F5F5F5;
       --bg-panel: #FFFFFF;
@@ -51,6 +67,19 @@ See `THEME.md` in this skill directory for full design specification.
       --text-muted: #6B6B6B;
       --accent-bg: #000000;
       --accent-text: #FFFFFF;
+    }
+    
+    /* Manual override: explicit dark mode */
+    [data-theme="dark"] {
+      --bg-base: #050505;
+      --bg-panel: #0A0A0A;
+      --bg-hover: #141414;
+      --border-dim: #1C1C1C;
+      --border-focus: #333333;
+      --text-primary: #F0F0F0;
+      --text-muted: #666666;
+      --accent-bg: #FFFFFF;
+      --accent-text: #000000;
     }
 
     /* Base Styles */
