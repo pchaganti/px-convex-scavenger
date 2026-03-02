@@ -322,10 +322,17 @@ def fetch_market_prices(ib: IB, positions: list) -> list:
 
     # Read results and cancel
     for pos, ticker in zip(positions, tickers):
+        price = None
+        # Prefer marketPrice, fall back to bid/ask midpoint
         if ticker.marketPrice() and not util.isNan(ticker.marketPrice()):
-            pos['marketPrice'] = ticker.marketPrice()
-            pos['marketValue'] = round(ticker.marketPrice() * abs(pos['position']) *
-                                       (100 if pos['secType'] == 'OPT' else 1), 2)
+            price = ticker.marketPrice()
+        elif ticker.bid and ticker.ask and not util.isNan(ticker.bid) and not util.isNan(ticker.ask):
+            price = round((ticker.bid + ticker.ask) / 2, 4)
+
+        if price is not None:
+            multiplier = 100 if pos['secType'] == 'OPT' else 1
+            pos['marketPrice'] = price
+            pos['marketValue'] = round(price * abs(pos['position']) * multiplier, 2)
         else:
             pos['marketPrice'] = None
             pos['marketValue'] = None

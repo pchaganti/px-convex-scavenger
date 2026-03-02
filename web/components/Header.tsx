@@ -1,14 +1,16 @@
 "use client";
 
-import { useRef, useEffect } from "react";
-import { Search } from "lucide-react";
+import { useRef, useEffect, type ReactNode } from "react";
+import { Moon, Sun } from "lucide-react";
 
 type HeaderProps = {
   activeLabel: string;
   onToggleTheme: () => void;
+  theme?: "dark" | "light";
+  children?: ReactNode;
 };
 
-export default function Header({ activeLabel, onToggleTheme }: HeaderProps) {
+export default function Header({ activeLabel, onToggleTheme, theme, children }: HeaderProps) {
   const searchRef = useRef<HTMLInputElement | null>(null);
 
   useEffect(() => {
@@ -29,6 +31,7 @@ export default function Header({ activeLabel, onToggleTheme }: HeaderProps) {
         WORKSPACE / <span>{activeLabel.toUpperCase()}</span>
       </div>
       <div className="header-actions" suppressHydrationWarning>
+        {children}
         <input
           suppressHydrationWarning
           ref={searchRef}
@@ -40,10 +43,10 @@ export default function Header({ activeLabel, onToggleTheme }: HeaderProps) {
           suppressHydrationWarning
           className="theme-toggle"
           onClick={onToggleTheme}
-          title="Toggle theme"
+          title={theme === "dark" ? "Switch to light mode" : "Switch to dark mode"}
           aria-label="Toggle theme"
         >
-          <Search size={14} />
+          {theme === "dark" ? <Sun size={14} /> : <Moon size={14} />}
         </button>
       </div>
     </header>

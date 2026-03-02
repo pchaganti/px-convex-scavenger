@@ -1,0 +1,93 @@
+"use client";
+
+import { useEffect, useMemo, useState } from "react";
+import { usePathname } from "next/navigation";
+import { RefreshCw } from "lucide-react";
+import type { WorkspaceSection } from "@/lib/types";
+import { navItems } from "@/lib/data";
+import { resolveSectionFromPath } from "@/lib/chat";
+import { usePortfolio } from "@/lib/usePortfolio";
+import Sidebar from "@/components/Sidebar";
+import Header from "@/components/Header";
+import ChatPanel from "@/components/ChatPanel";
+import MetricCards from "@/components/MetricCards";
+import WorkspaceSections from "@/components/WorkspaceSections";
+
+type WorkspaceShellProps = {
+  section?: WorkspaceSection;
+};
+
+export default function WorkspaceShell({ section }: WorkspaceShellProps) {
+  const [theme, setTheme] = useState<"dark" | "light" | null>(null);
+  const pathname = usePathname();
+  const activeSection: WorkspaceSection = section ?? resolveSectionFromPath(pathname, "dashboard");
+  const activeLabel = navItems.find((item) => item.route === activeSection)?.label ?? "Dashboard";
+  const { data: portfolio, syncing, error, lastSync, syncNow } = usePortfolio();
+
+  useEffect(() => {
+    const saved = localStorage.getItem("theme");
+    if (saved === "light" || saved === "dark") {
+      setTheme(saved);
+      document.documentElement.setAttribute("data-theme", saved);
+    } else {
+      const prefersDark = window.matchMedia("(prefers-color-scheme: dark)").matches;
+      const systemTheme = prefersDark ? "dark" : "light";
+      setTheme(systemTheme);
+      document.documentElement.setAttribute("data-theme", systemTheme);
+    }
+  }, []);
+
+  const resolvedTheme = theme ?? "dark";
+
+  const actionTone = useMemo(() => {
+    return resolvedTheme === "dark" ? "#f0f0f0" : "#0a0a0a";
+  }, [resolvedTheme]);
+
+  const toggleTheme = () => {
+    const next = resolvedTheme === "dark" ? "light" : "dark";
+    setTheme(next);
+    document.documentElement.setAttribute("data-theme", next);
+    localStorage.setItem("theme", next);
+  };
+
+  const syncLabel = lastSync
+    ? `Last sync: ${new Date(lastSync).toLocaleTimeString()}`
+    : error
+      ? `Sync error`
+      : "No sync yet";
+
+  return (
+    <div className="app-shell" suppressHydrationWarning>
+      <Sidebar activeSection={activeSection} actionTone={actionTone} />
+
+      <main className="main">
+        <Header activeLabel={activeLabel} onToggleTheme={toggleTheme} theme={resolvedTheme}>
+          <div className="sync-controls">
+            <span className={`sync-status ${error ? "sync-error" : syncing ? "sync-active" : ""}`}>
+              {syncLabel}
+            </span>
+            <button
+              className="sync-button"
+              onClick={syncNow}
+              disabled={syncing}
+              title="Sync portfolio from IB Gateway"
+            >
+              <RefreshCw size={14} className={syncing ? "spin" : ""} />
+              {syncing ? "Syncing..." : "Sync Now"}
+            </button>
+          </div>
+        </Header>
+
+        <div className="content">
+          <ChatPanel activeSection={activeSection} />
+
+          {activeSection !== "dashboard" ? <MetricCards portfolio={portfolio} /> : null}
+
+          {activeSection !== "dashboard" ? (
+            <WorkspaceSections section={activeSection} portfolio={portfolio} />
+          ) : null}
+        </div>
+      </main>
+    </div>
+  );
+}

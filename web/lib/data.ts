@@ -29,13 +29,6 @@ export const navItems: WorkspaceNavItem[] = [
   { label: "Journal", route: "journal", href: "/journal", icon: Wrench },
 ];
 
-export const metricCards = [
-  { label: "Net Liquidation", value: "$981,353", change: "BANKROLL", tone: "neutral" },
-  { label: "Positions", value: "19", change: "7 DEFINED / 12 UNDEFINED", tone: "neutral" },
-  { label: "Flow Aligned", value: "6", change: "↑ SUPPORTED", tone: "positive" },
-  { label: "Flow Against", value: "2", change: "↓ REVIEW NEEDED", tone: "negative" },
-];
-
 export const supports: FlowRow[] = [
   { ticker: "IGV", position: "Long Calls + Risk Rev", flowLabel: "72% ACCUM", flowClass: "accum", strength: "44.2", note: "Strong institutional buying" },
   { ticker: "NFLX", position: "Long Stock", flowLabel: "60% ACCUM", flowClass: "accum", strength: "20.5", note: "Friday 93% buy ratio" },
