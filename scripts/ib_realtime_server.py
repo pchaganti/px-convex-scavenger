@@ -176,11 +176,20 @@ class IBRealtimeServer:
     
     def _ticker_to_dict(self, symbol: str, ticker: Any) -> dict:
         """Convert IB ticker to dictionary."""
+        last = ticker.last if ticker.last == ticker.last else None  # NaN check
+        bid = ticker.bid if ticker.bid == ticker.bid else None
+        ask = ticker.ask if ticker.ask == ticker.ask else None
+        last_is_calculated = False
+        if last is None and bid is not None and ask is not None:
+            last = round((bid + ask) / 2, 4)
+            last_is_calculated = True
+
         return {
             "symbol": symbol,
-            "last": ticker.last if ticker.last == ticker.last else None,  # NaN check
-            "bid": ticker.bid if ticker.bid == ticker.bid else None,
-            "ask": ticker.ask if ticker.ask == ticker.ask else None,
+            "last": last,
+            "lastIsCalculated": last_is_calculated,
+            "bid": bid,
+            "ask": ask,
             "bidSize": ticker.bidSize if ticker.bidSize == ticker.bidSize else None,
             "askSize": ticker.askSize if ticker.askSize == ticker.askSize else None,
             "volume": ticker.volume if ticker.volume == ticker.volume else None,

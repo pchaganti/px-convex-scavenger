@@ -57,6 +57,7 @@ export type PortfolioLeg = {
   avg_cost: number;
   market_price: number | null;
   market_value: number | null;
+  market_price_is_calculated?: boolean;
 };
 
 export type PortfolioPosition = {
@@ -72,6 +73,7 @@ export type PortfolioPosition = {
   max_risk: number | null;
   market_value: number | null;
   legs: PortfolioLeg[];
+  market_price_is_calculated?: boolean;
   kelly_optimal: number | null;
   target: number | null;
   stop: number | null;
@@ -141,6 +143,7 @@ export type PortfolioData = {
 export type PriceData = {
   symbol: string;
   last: number | null;
+  lastIsCalculated: boolean;
   bid: number | null;
   ask: number | null;
   bidSize: number | null;

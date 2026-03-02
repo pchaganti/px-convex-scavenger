@@ -5,7 +5,7 @@ Next.js dashboard with real-time IB pricing and Claude-powered conversational in
 ## Prerequisites
 
 - Node.js 20+
-- Python 3.9+ (for IB scripts)
+- Python 3.9+ (for other IB scripts)
 - Interactive Brokers TWS or IB Gateway running
 - API keys in `web/.env`
 
@@ -14,7 +14,6 @@ Next.js dashboard with real-time IB pricing and Claude-powered conversational in
 ```bash
 # 1. Install dependencies
 npm install
-pip install ib_insync websockets
 
 # 2. Configure environment
 cp .env.example .env
@@ -41,15 +40,15 @@ The `npm run dev` command starts both:
 └─────────────────┘     └──────────────────┘     └─────────────┘
         │
         │               ┌──────────────────┐     ┌─────────────┐
-        └──────────────▶│ ib_realtime_     │◀───▶│  WebSocket  │
-                        │ server.py        │     │  Clients    │
+                        └──────────────▶│ ib_realtime_     │◀───▶│  WebSocket  │
+                        │ server.js        │     │  Clients    │
                         │ (streaming)      │     └─────────────┘
                         └──────────────────┘
                                 │
                                 ▼
                         ┌──────────────────┐     ┌─────────────┐
                         │ /api/prices      │────▶│  usePrices  │
-                        │ (SSE endpoint)   │     │  (React)    │
+                        │ (snapshot only)  │     │  (React)    │
                         └──────────────────┘     └─────────────┘
 ```
 
@@ -58,7 +57,7 @@ The `npm run dev` command starts both:
 | Component | Purpose | Update Frequency |
 |-----------|---------|------------------|
 | `ib_sync.py` | Portfolio positions, P&L, account values | Every 30 seconds |
-| `ib_realtime_server.py` | Live bid/ask/last prices | Real-time (<1ms latency) |
+| `ib_realtime_server.js` | Live bid/ask/last prices | Real-time (<1ms latency) |
 
 ### Portfolio Price Table Indicators
 
@@ -87,7 +86,8 @@ cp .env.example .env
 **Optional:**
 - `ANTHROPIC_MODEL` - Model override
 - `ANTHROPIC_API_URL` - API endpoint override
-- `IB_REALTIME_WS_URL` - WebSocket server URL (default: `ws://localhost:8765`)
+- `IB_REALTIME_WS_URL` - Server-side websocket URL used by `/api/prices` for one-time snapshots (default: `ws://localhost:8765`)
+- `NEXT_PUBLIC_IB_REALTIME_WS_URL` - Browser websocket URL for direct realtime subscriptions (default: `ws://localhost:8765`)
 
 ## Real-Time Pricing
 
@@ -95,17 +95,20 @@ cp .env.example .env
 
 ```bash
 # Default settings
-python3 ../scripts/ib_realtime_server.py
+node ../scripts/ib_realtime_server.js
 
 # Custom ports
-python3 ../scripts/ib_realtime_server.py --port 8765 --ib-port 4001
+node ../scripts/ib_realtime_server.js --port 8765 --ib-port 4001
 ```
 
 ### API Endpoint
 
-**Stream prices (SSE):**
+**Stream prices (WebSocket):**
 ```
-GET /api/prices?symbols=AAPL,MSFT,NVDA
+ws://localhost:8765
+
+Message:
+{"action": "subscribe", "symbols": ["AAPL", "MSFT", "NVDA"]}
 ```
 
 **Snapshot (one-time):**
@@ -114,6 +117,9 @@ curl -X POST http://localhost:3000/api/prices \
   -H "Content-Type: application/json" \
   -d '{"symbols": ["AAPL", "MSFT"]}'
 ```
+
+`GET /api/prices` is intentionally deprecated (`405`) because real-time streaming now uses direct WebSocket subscriptions to the Node server.
+Node now owns the live stream directly; Next.js only provides one-time snapshot support.
 
 ### React Hook
 
@@ -164,7 +170,7 @@ function PriceDisplay() {
 | `/api/portfolio` | POST | Trigger IB sync |
 | `/api/orders` | GET | Read open/executed orders |
 | `/api/orders` | POST | Sync orders from IB |
-| `/api/prices` | GET | SSE stream for real-time prices |
+| `/api/prices` | GET | Deprecated (real-time SSE removed) |
 | `/api/prices` | POST | One-time price snapshot |
 | `/api/assistant` | POST | Claude conversation |
 | `/api/pi` | POST | Execute PI commands |
@@ -234,12 +240,16 @@ npm run test:ib
 ### Price Server Not Connecting
 
 ```bash
-# Check if server is running
-curl -s http://localhost:8765 || echo "Server not running"
-
-# Check IB connection in server logs
-python3 ../scripts/ib_realtime_server.py 2>&1 | head -20
+# Start the server with explicit IB port and verify startup logs
+node ../scripts/ib_realtime_server.js --ib-port 4001
 ```
+
+- Confirm logs include:
+  - `IB realtime server listening on ws://0.0.0.0:8765`
+  - `IB target 127.0.0.1:4001`
+  - `IB connected` (once TWS/Gateway is available)
+
+- `curl` is not a valid check for a WebSocket endpoint; use normal UI reconnect flow or a WebSocket client to validate connectivity.
 
 ### Rate Limiting (Yahoo Finance fallback)
 

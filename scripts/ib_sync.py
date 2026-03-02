@@ -18,6 +18,7 @@ import json
 import sys
 from datetime import datetime
 from pathlib import Path
+from typing import Optional, Tuple
 
 try:
     from ib_insync import IB, util
@@ -76,7 +77,7 @@ def format_option_structure(contract, position) -> str:
         return contract.secType
 
 
-def detect_structure_type(legs: list) -> tuple[str, str]:
+def detect_structure_type(legs: list) -> Tuple[str, str]:
     """
     Detect multi-leg structure type from component legs.
     Returns (structure_name, risk_profile)
@@ -191,11 +192,14 @@ def collapse_positions(positions: list) -> list:
                 total_entry_cost -= leg['entry_cost']
 
         known_mv = []
+        is_market_price_calculated = False
         for leg in legs:
             mv = leg.get('marketValue')
             if mv is not None:
                 sign = 1 if leg['position'] > 0 else -1
                 known_mv.append(sign * mv)
+                if leg.get('marketPriceIsCalculated'):
+                    is_market_price_calculated = True
         total_market_value = sum(known_mv) if known_mv else None
         
         # Net contracts (for spreads, use the long leg count)
@@ -239,7 +243,8 @@ def collapse_positions(positions: list) -> list:
                 "entry_cost": leg['entry_cost'],
                 "avg_cost": leg['avgCost'],
                 "market_price": leg.get('marketPrice'),
-                "market_value": leg.get('marketValue')
+                "market_value": leg.get('marketValue'),
+                "market_price_is_calculated": bool(leg.get('marketPriceIsCalculated'))
             })
         
         collapsed.append({
@@ -252,8 +257,9 @@ def collapse_positions(positions: list) -> list:
             "contracts": contracts,
             "direction": direction,
             "entry_cost": round(total_entry_cost, 2),
-            "max_risk": round(max_risk, 2) if max_risk else None,
-            "market_value": round(total_market_value, 2) if total_market_value else None,
+            "max_risk": round(max_risk, 2) if max_risk is not None else None,
+            "market_value": round(total_market_value, 2) if total_market_value is not None else None,
+            "market_price_is_calculated": bool(is_market_price_calculated) if total_market_value is not None else False,
             "legs": formatted_legs,
             "kelly_optimal": None,
             "target": None,
@@ -280,6 +286,26 @@ def parse_expiry(contract) -> str:
             return f"{expiry_str[:4]}-{expiry_str[4:6]}-{expiry_str[6:8]}"
         return expiry_str
     return "N/A"
+
+
+def _normalize_market_price(raw_price) -> Optional[float]:
+    """Return a valid market price or None when IB provides unusable values."""
+    if raw_price is None:
+        return None
+    if util.isNan(raw_price):
+        return None
+    if raw_price < 0:
+        return None
+    return float(raw_price)
+
+
+def _resolve_market_price(market_price: Optional[float], bid: Optional[float], ask: Optional[float]) -> Tuple[Optional[float], bool]:
+    """Return a usable price and whether it was calculated from midpoint."""
+    if market_price is not None:
+        return market_price, False
+    if bid is not None and ask is not None:
+        return round((bid + ask) / 2, 4), True
+    return None, False
 
 
 def fetch_positions(ib: IB) -> list:
@@ -333,20 +359,20 @@ def fetch_market_prices(ib: IB, positions: list) -> list:
 
     # Read results and cancel
     for pos, ticker in zip(positions, tickers):
-        price = None
-        # Prefer marketPrice, fall back to bid/ask midpoint
-        if ticker.marketPrice() and not util.isNan(ticker.marketPrice()):
-            price = ticker.marketPrice()
-        elif ticker.bid and ticker.ask and not util.isNan(ticker.bid) and not util.isNan(ticker.ask):
-            price = round((ticker.bid + ticker.ask) / 2, 4)
+        market_price = _normalize_market_price(ticker.marketPrice())
+        bid = _normalize_market_price(ticker.bid)
+        ask = _normalize_market_price(ticker.ask)
+        price, is_calculated = _resolve_market_price(market_price, bid, ask)
 
         if price is not None:
             multiplier = 100 if pos['secType'] == 'OPT' else 1
             pos['marketPrice'] = price
             pos['marketValue'] = round(price * abs(pos['position']) * multiplier, 2)
+            pos['marketPriceIsCalculated'] = is_calculated
         else:
             pos['marketPrice'] = None
             pos['marketValue'] = None
+            pos['marketPriceIsCalculated'] = False
         ib.cancelMktData(pos['contract'])
         del pos['contract']  # Remove non-serializable contract object
 
@@ -379,10 +405,10 @@ def display_portfolio(account: dict, positions: list, collapsed: list = None):
             print(f"\n  [{pos['id']}] {pos['ticker']} — {pos['structure']}")
             print(f"      {risk_icon} {pos['risk_profile'].upper()} | {pos['direction']} | {pos['contracts']}x")
             print(f"      Entry: ${pos['entry_cost']:,.2f}", end="")
-            if pos['max_risk']:
+            if pos['max_risk'] is not None:
                 print(f" | Max Risk: ${pos['max_risk']:,.2f}", end="")
             print()
-            if pos.get('market_value'):
+            if pos.get('market_value') is not None:
                 pnl = pos['market_value'] - pos['entry_cost']
                 pnl_pct = (pnl / abs(pos['entry_cost']) * 100) if pos['entry_cost'] != 0 else 0
                 print(f"      Market Value: ${pos['market_value']:,.2f} ({pnl_pct:+.1f}%)")
@@ -398,7 +424,7 @@ def display_portfolio(account: dict, positions: list, collapsed: list = None):
                     strike_str = f" ${leg['strike']}" if leg['strike'] else ""
                     print(f"      │  {prefix}─ {leg['direction']} {leg['contracts']}x {leg['type']}{strike_str}")
                     print(f"      │     Cost: ${leg['entry_cost']:,.2f}", end="")
-                    if leg.get('market_value'):
+                    if leg.get('market_value') is not None:
                         print(f" → ${leg['market_value']:,.2f}", end="")
                     print()
     else:
@@ -416,7 +442,7 @@ def display_portfolio(account: dict, positions: list, collapsed: list = None):
                 direction = "LONG" if pos['position'] > 0 else "SHORT"
                 print(f"    {direction} {abs(pos['position'])}x {pos['structure']}")
                 print(f"      Entry Cost: ${pos['entry_cost']:,.2f}")
-                if pos.get('marketValue'):
+                if pos.get('marketValue') is not None:
                     pnl = pos['marketValue'] - pos['entry_cost']
                     pnl_pct = (pnl / pos['entry_cost'] * 100) if pos['entry_cost'] > 0 else 0
                     print(f"      Market Value: ${pos['marketValue']:,.2f} ({pnl_pct:+.1f}%)")

@@ -1,21 +1,12 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-
-export type PriceData = {
-  symbol: string;
-  last: number | null;
-  bid: number | null;
-  ask: number | null;
-  bidSize: number | null;
-  askSize: number | null;
-  volume: number | null;
-  high: number | null;
-  low: number | null;
-  open: number | null;
-  close: number | null;
-  timestamp: string;
-};
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  type WSMessage,
+  type PriceData,
+  normalizeSymbolList,
+  symbolKey,
+} from "./pricesProtocol";
 
 export type PriceUpdate = {
   symbol: string;
@@ -50,194 +41,188 @@ export type UsePricesReturn = {
 };
 
 /**
- * React hook for real-time price streaming from IB via SSE.
- * 
- * @example
- * ```tsx
- * const { prices, connected, error } = usePrices({
- *   symbols: ["AAPL", "MSFT", "NVDA"],
- *   onPriceUpdate: (update) => console.log(`${update.symbol}: ${update.data.last}`)
- * });
- * ```
+ * React hook for real-time price streaming from IB via WebSocket.
  */
 export function usePrices(options: UsePricesOptions): UsePricesReturn {
-  const { symbols, enabled = true, onPriceUpdate, onConnectionChange } = options;
-  
+  const {
+    symbols,
+    enabled = true,
+    onPriceUpdate,
+    onConnectionChange,
+  } = options;
+
   const [prices, setPrices] = useState<Record<string, PriceData>>({});
   const [connected, setConnected] = useState(false);
   const [ibConnected, setIbConnected] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  
-  const eventSourceRef = useRef<EventSource | null>(null);
+
+  const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mountedRef = useRef(true);
 
-  // Stable symbol string for dependency
-  const symbolsKey = symbols.sort().join(",");
+  const symbolHash = symbolKey(symbols);
+  const normalizedSymbols = useMemo(
+    () => normalizeSymbolList(symbols),
+    [symbolHash],
+  );
+
+  const socketUrl =
+    process.env.NEXT_PUBLIC_IB_REALTIME_WS_URL ??
+    process.env.IB_REALTIME_WS_URL ??
+    "ws://localhost:8765";
 
   const connect = useCallback(() => {
-    if (!enabled || symbols.length === 0) return;
-    
-    // Close existing connection
-    if (eventSourceRef.current) {
-      eventSourceRef.current.close();
-    }
-    
-    // Clear any pending reconnect
+    if (!enabled || normalizedSymbols.length === 0) return;
+
     if (reconnectTimeoutRef.current) {
       clearTimeout(reconnectTimeoutRef.current);
       reconnectTimeoutRef.current = null;
     }
 
-    const url = `/api/prices?symbols=${encodeURIComponent(symbolsKey)}`;
-    const eventSource = new EventSource(url);
-    eventSourceRef.current = eventSource;
+    if (wsRef.current) {
+      wsRef.current.close();
+    }
 
-    eventSource.addEventListener("connected", () => {
+    const ws = new WebSocket(socketUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
       if (!mountedRef.current) return;
       setConnected(true);
       setError(null);
       onConnectionChange?.(true);
-    });
 
-    eventSource.addEventListener("price", (event) => {
+      ws.send(
+        JSON.stringify({
+          action: "subscribe",
+          symbols: normalizedSymbols,
+        }),
+      );
+    };
+
+    ws.onmessage = (event) => {
       if (!mountedRef.current) return;
       try {
-        const data = JSON.parse(event.data) as PriceData;
-        setPrices(prev => ({
-          ...prev,
-          [data.symbol]: data
-        }));
-        onPriceUpdate?.({
-          symbol: data.symbol,
-          data,
-          receivedAt: new Date()
-        });
-      } catch (e) {
-        console.error("Failed to parse price event:", e);
-      }
-    });
+        const message = JSON.parse(event.data) as WSMessage;
 
-    eventSource.addEventListener("snapshot", (event) => {
-      if (!mountedRef.current) return;
-      try {
-        const data = JSON.parse(event.data) as PriceData;
-        setPrices(prev => ({
-          ...prev,
-          [data.symbol]: data
-        }));
-      } catch (e) {
-        console.error("Failed to parse snapshot event:", e);
-      }
-    });
-
-    eventSource.addEventListener("subscribed", (event) => {
-      if (!mountedRef.current) return;
-      try {
-        const { symbols: subscribedSymbols } = JSON.parse(event.data) as { symbols: string[] };
-        console.log("Subscribed to:", subscribedSymbols);
-      } catch (e) {
-        console.error("Failed to parse subscribed event:", e);
-      }
-    });
-
-    eventSource.addEventListener("status", (event) => {
-      if (!mountedRef.current) return;
-      try {
-        const { ib_connected } = JSON.parse(event.data) as { ib_connected: boolean };
-        setIbConnected(ib_connected);
-      } catch (e) {
-        console.error("Failed to parse status event:", e);
-      }
-    });
-
-    eventSource.addEventListener("error", (event) => {
-      if (!mountedRef.current) return;
-      try {
-        if (event instanceof MessageEvent) {
-          const { message } = JSON.parse(event.data) as { message: string };
-          setError(message);
+        switch (message.type) {
+          case "price":
+          case "snapshot": {
+            const { data } = message;
+            setPrices((prev) => ({
+              ...prev,
+              [data.symbol]: data,
+            }));
+            onPriceUpdate?.({
+              symbol: data.symbol,
+              data,
+              receivedAt: new Date(),
+            });
+            break;
+          }
+          case "status":
+            setIbConnected(message.ib_connected);
+            break;
+          case "error":
+            setError(message.message);
+            break;
+          case "pong":
+          case "subscribed":
+          case "unsubscribed":
+            break;
+          default:
+            break;
         }
-      } catch {
-        // Generic error
+      } catch (error_) {
+        console.error("Failed to parse price message:", error_);
       }
-    });
+    };
 
-    eventSource.addEventListener("disconnected", () => {
+    ws.onclose = () => {
       if (!mountedRef.current) return;
       setConnected(false);
       onConnectionChange?.(false);
-      
-      // Auto-reconnect after 5 seconds
-      reconnectTimeoutRef.current = setTimeout(() => {
-        if (mountedRef.current && enabled) {
-          connect();
-        }
-      }, 5000);
-    });
 
-    eventSource.onerror = () => {
-      if (!mountedRef.current) return;
-      setConnected(false);
-      setError("Connection lost");
-      onConnectionChange?.(false);
-      
-      // Close and try to reconnect
-      eventSource.close();
+      if (!enabled || normalizedSymbols.length === 0) return;
+
       reconnectTimeoutRef.current = setTimeout(() => {
-        if (mountedRef.current && enabled) {
+        if (mountedRef.current && enabled && normalizedSymbols.length > 0) {
           connect();
         }
       }, 5000);
     };
-  }, [symbolsKey, enabled, onPriceUpdate, onConnectionChange, symbols.length]);
+
+    ws.onerror = () => {
+      if (!mountedRef.current) return;
+      setConnected(false);
+      setError("Connection lost");
+      onConnectionChange?.(false);
+      ws.close();
+    };
+  }, [enabled, normalizedSymbols, onConnectionChange, onPriceUpdate, socketUrl, symbolHash]);
 
   const reconnect = useCallback(() => {
     connect();
   }, [connect]);
 
   const getSnapshot = useCallback(async (snapshotSymbols: string[]): Promise<Record<string, PriceData>> => {
+    const symbolsToRequest = normalizeSymbolList(snapshotSymbols);
+    if (symbolsToRequest.length === 0) {
+      return {};
+    }
+
     try {
       const response = await fetch("/api/prices", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbols: snapshotSymbols })
+        body: JSON.stringify({ symbols: symbolsToRequest }),
       });
-      
+
+      const body = (await response.json()) as {
+        prices?: Record<string, PriceData>;
+        error?: string;
+      };
+
       if (!response.ok) {
-        throw new Error("Failed to get snapshot");
+        throw new Error(body.error ?? "Failed to get snapshot");
       }
-      
-      const data = await response.json() as { prices: Record<string, PriceData> };
-      return data.prices;
-    } catch (e) {
-      console.error("Snapshot error:", e);
+
+      return body.prices ?? {};
+    } catch (error_) {
+      setError(error_ instanceof Error ? error_.message : "Failed to get snapshot");
+      console.error("Snapshot error:", error_);
       return {};
     }
   }, []);
 
-  // Connect when symbols change or enabled changes
   useEffect(() => {
     mountedRef.current = true;
-    
-    if (enabled && symbols.length > 0) {
+
+    if (enabled && normalizedSymbols.length > 0) {
       connect();
+    } else {
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
+      }
+      setConnected(false);
+      onConnectionChange?.(false);
     }
-    
+
     return () => {
       mountedRef.current = false;
-      
-      if (eventSourceRef.current) {
-        eventSourceRef.current.close();
-        eventSourceRef.current = null;
+
+      if (wsRef.current) {
+        wsRef.current.close();
+        wsRef.current = null;
       }
-      
+
       if (reconnectTimeoutRef.current) {
         clearTimeout(reconnectTimeoutRef.current);
         reconnectTimeoutRef.current = null;
       }
     };
-  }, [connect, enabled, symbols.length]);
+  }, [connect, enabled, onConnectionChange, symbolHash, normalizedSymbols.length]);
 
   return {
     prices,
@@ -245,7 +230,7 @@ export function usePrices(options: UsePricesOptions): UsePricesReturn {
     ibConnected,
     error,
     reconnect,
-    getSnapshot
+    getSnapshot,
   };
 }
 
@@ -253,10 +238,10 @@ export function usePrices(options: UsePricesOptions): UsePricesReturn {
  * Format price for display
  */
 export function formatPrice(price: number | null | undefined): string {
-  if (price == null || isNaN(price)) return "—";
+  if (price == null || Number.isNaN(price)) return "—";
   return price.toLocaleString("en-US", {
     minimumFractionDigits: 2,
-    maximumFractionDigits: 2
+    maximumFractionDigits: 2,
   });
 }
 
@@ -264,7 +249,7 @@ export function formatPrice(price: number | null | undefined): string {
  * Format volume for display
  */
 export function formatVolume(volume: number | null | undefined): string {
-  if (volume == null || isNaN(volume)) return "—";
+  if (volume == null || Number.isNaN(volume)) return "—";
   if (volume >= 1_000_000) {
     return `${(volume / 1_000_000).toFixed(1)}M`;
   }

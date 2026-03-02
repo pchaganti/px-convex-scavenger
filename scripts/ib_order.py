@@ -75,7 +75,16 @@ def get_market_data(ib: IB, contract) -> dict:
     bid = ticker.bid if ticker.bid and not util.isNan(ticker.bid) else 0
     ask = ticker.ask if ticker.ask and not util.isNan(ticker.ask) else 0
     mid = (bid + ask) / 2 if bid and ask else 0
-    last = ticker.last if ticker.last and not util.isNan(ticker.last) else 0
+    raw_last = ticker.last if ticker.last and not util.isNan(ticker.last) else 0
+    if raw_last:
+        last = raw_last
+        last_is_calculated = False
+    elif mid:
+        last = mid
+        last_is_calculated = True
+    else:
+        last = 0
+        last_is_calculated = False
     
     ib.cancelMktData(contract)
     
@@ -84,6 +93,7 @@ def get_market_data(ib: IB, contract) -> dict:
         'ask': ask,
         'mid': round(mid, 2),
         'last': last,
+        'last_is_calculated': last_is_calculated,
         'spread': round(ask - bid, 2) if bid and ask else 0,
         'spread_pct': round((ask - bid) / mid * 100, 1) if mid else 0
     }

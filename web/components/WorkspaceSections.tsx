@@ -255,8 +255,9 @@ function FlowSections() {
 
 /* ─── Portfolio tables ──────────────────────────────────── */
 
-const fmtUsd = (n: number) => `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
-const fmtPrice = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+export const fmtUsd = (n: number) => `$${n.toLocaleString("en-US", { maximumFractionDigits: 0 })}`;
+export const fmtPrice = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+export const fmtPriceOrCalculated = (n: number, isCalculated: boolean) => isCalculated ? `C${fmtPrice(n)}` : fmtPrice(n);
 
 function resolveMarketValue(pos: PortfolioPosition): number | null {
   // For multi-leg positions, always recompute sign-aware from legs
@@ -297,6 +298,14 @@ function getLastPrice(pos: PortfolioPosition): number | null {
   if (mv == null) return null;
   const mult = getMultiplier(pos);
   return mv / (pos.contracts * mult);
+}
+
+export function getLastPriceIsCalculated(pos: PortfolioPosition): boolean {
+  if (pos.market_price_is_calculated != null) return pos.market_price_is_calculated;
+  if (pos.legs.length === 1) {
+    return Boolean(pos.legs[0]?.market_price_is_calculated);
+  }
+  return pos.legs.some((leg) => Boolean(leg.market_price_is_calculated));
 }
 
 function usePriceDirection(price: number | null): {
@@ -347,6 +356,7 @@ function LegRow({
   showExpiry: boolean;
 }) {
   const marketPrice = leg.market_price != null ? Math.abs(leg.market_price) : null;
+  const isCalculated = Boolean(leg.market_price_is_calculated);
   const { direction: priceDirection, flashDirection } = usePriceDirection(marketPrice);
 
   return (
@@ -357,7 +367,7 @@ function LegRow({
       </td>
       <td className="right" style={{ opacity: 0.7, fontSize: "0.85em" }}>{fmtPrice(Math.abs(leg.avg_cost) / (leg.type === "Stock" ? 1 : 100))}</td>
       <td className="right last-price-cell">
-        {marketPrice != null ? fmtPrice(marketPrice) : "—"}
+        {marketPrice != null ? fmtPriceOrCalculated(marketPrice, isCalculated) : "—"}
         {priceDirection === "up" && <ArrowUp size={11} className="price-trend-icon price-trend-up" aria-label="price up" />}
         {priceDirection === "down" && <ArrowDown size={11} className="price-trend-icon price-trend-down" aria-label="price down" />}
       </td>
@@ -376,6 +386,7 @@ function PositionRow({ pos, showExpiry = true }: { pos: PortfolioPosition; showE
   const pnlPct = pnl != null && entryCost !== 0 ? (pnl / Math.abs(entryCost)) * 100 : null;
   const avgEntry = getAvgEntry(pos);
   const lastPrice = getLastPrice(pos);
+  const lastPriceIsCalculated = getLastPriceIsCalculated(pos);
   const { direction: priceDirection, flashDirection } = usePriceDirection(lastPrice);
 
   return (
@@ -390,7 +401,7 @@ function PositionRow({ pos, showExpiry = true }: { pos: PortfolioPosition; showE
         </td>
         <td className="right">{fmtPrice(avgEntry)}</td>
         <td className="right last-price-cell">
-          {lastPrice != null ? fmtPrice(lastPrice) : "—"}
+          {lastPrice != null ? fmtPriceOrCalculated(lastPrice, lastPriceIsCalculated) : "—"}
           {priceDirection === "up" && <ArrowUp size={11} className="price-trend-icon price-trend-up" aria-label="price up" />}
           {priceDirection === "down" && <ArrowDown size={11} className="price-trend-icon price-trend-down" aria-label="price down" />}
         </td>

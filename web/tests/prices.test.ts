@@ -1,5 +1,8 @@
 import { describe, it, before, after, mock } from "node:test";
 import assert from "node:assert";
+import type { PortfolioPosition } from "../lib/types";
+import { normalizeSymbolList, symbolKey } from "../lib/pricesProtocol";
+import { fmtPriceOrCalculated, getLastPriceIsCalculated } from "../components/WorkspaceSections";
 
 /**
  * Tests for real-time price functionality.
@@ -18,6 +21,7 @@ describe("PriceData types", () => {
   type PriceData = {
     symbol: string;
     last: number | null;
+    lastIsCalculated: boolean;
     bid: number | null;
     ask: number | null;
     bidSize: number | null;
@@ -43,6 +47,7 @@ describe("PriceData types", () => {
       low: 174.00,
       open: 174.50,
       close: 175.00,
+      lastIsCalculated: false,
       timestamp: new Date().toISOString()
     };
 
@@ -64,11 +69,28 @@ describe("PriceData types", () => {
       low: null,
       open: null,
       close: null,
+      lastIsCalculated: false,
       timestamp: new Date().toISOString()
     };
 
     assert.strictEqual(mockPrice.last, null);
     assert.strictEqual(mockPrice.bid, null);
+  });
+});
+
+describe("Price protocol helpers", () => {
+  it("normalizes symbols with trim/uppercase/filter", () => {
+    assert.deepStrictEqual(
+      normalizeSymbolList([" aapl ", "", "  ", "MsFt", "NVDA"]),
+      ["AAPL", "MSFT", "NVDA"],
+    );
+  });
+
+  it("builds stable symbol keys", () => {
+    const first = symbolKey(["MSFT", "AAPL", "NVDA"]);
+    const second = symbolKey(["NVDA", "AAPL", "MSFT"]);
+    assert.strictEqual(first, second);
+    assert.strictEqual(first, "AAPL,MSFT,NVDA");
   });
 });
 
@@ -146,6 +168,14 @@ describe("Price formatting utilities", () => {
     assert.strictEqual(calcChangePercent(100, null), null);
     assert.strictEqual(calcChangePercent(100, 0), null);
   });
+
+  it("prefixes C for calculated prices", () => {
+    assert.strictEqual(fmtPriceOrCalculated(175.5, true), "C$175.50");
+  });
+
+  it("does not prefix C for raw prices", () => {
+    assert.strictEqual(fmtPriceOrCalculated(175.5, false), "$175.50");
+  });
 });
 
 // =============================================================================
@@ -180,6 +210,31 @@ describe("Price API route parsing", () => {
     
     assert.deepStrictEqual(symbols, ["AAPL", "MSFT", "NVDA"]);
   });
+
+  it("should parse a calculated midpoint payload", () => {
+    const payload = {
+      type: "price",
+      symbol: "AAPL",
+      data: {
+        symbol: "AAPL",
+        last: null,
+        lastIsCalculated: true,
+        bid: 175.4,
+        ask: 175.6,
+        bidSize: 100,
+        askSize: 110,
+        volume: 2000000,
+        high: 176.0,
+        low: 174.0,
+        open: 175.0,
+        close: 175.5,
+        timestamp: new Date().toISOString(),
+      },
+    };
+
+    assert.equal(payload.data.lastIsCalculated, true);
+    assert.equal(payload.data.last, null);
+  });
 });
 
 // =============================================================================
@@ -188,21 +243,74 @@ describe("Price API route parsing", () => {
 
 describe("WebSocket message protocol", () => {
   type WSMessage = 
-    | { type: "price"; symbol: string; data: unknown }
+    | {
+      type: "price";
+      symbol: string;
+      data: {
+        symbol: string;
+        last: number | null;
+        lastIsCalculated: boolean;
+        bid: number | null;
+        ask: number | null;
+        bidSize: number | null;
+        askSize: number | null;
+        volume: number | null;
+        high: number | null;
+        low: number | null;
+        open: number | null;
+        close: number | null;
+        timestamp: string;
+      };
+    }
     | { type: "subscribed"; symbols: string[] }
     | { type: "unsubscribed"; symbols: string[] }
     | { type: "error"; message: string }
-    | { type: "status"; ib_connected: boolean };
+    | { type: "status"; ib_connected: boolean }
+    | { type: "pong" }
+    | {
+      type: "snapshot";
+      symbol: string;
+      data: {
+        symbol: string;
+        last: number | null;
+        lastIsCalculated: boolean;
+        bid: number | null;
+        ask: number | null;
+        bidSize: number | null;
+        askSize: number | null;
+        volume: number | null;
+        high: number | null;
+        low: number | null;
+        open: number | null;
+        close: number | null;
+        timestamp: string;
+      };
+    };
 
   it("should parse price message", () => {
     const msg: WSMessage = {
       type: "price",
       symbol: "AAPL",
-      data: { last: 175.50 }
+      data: {
+        symbol: "AAPL",
+        last: 175.50,
+        lastIsCalculated: true,
+        bid: 175.40,
+        ask: 175.60,
+        bidSize: 100,
+        askSize: 120,
+        volume: 5000000,
+        high: 176.00,
+        low: 174.00,
+        open: 175.00,
+        close: 175.50,
+        timestamp: new Date().toISOString(),
+      }
     };
     
     assert.strictEqual(msg.type, "price");
     assert.strictEqual(msg.symbol, "AAPL");
+    assert.strictEqual(msg.data.lastIsCalculated, true);
   });
 
   it("should parse subscribed message", () => {
@@ -233,6 +341,136 @@ describe("WebSocket message protocol", () => {
     
     assert.strictEqual(msg.type, "status");
     assert.strictEqual(msg.ib_connected, true);
+  });
+
+  it("should parse unsubscribed message", () => {
+    const msg: WSMessage = {
+      type: "unsubscribed",
+      symbols: ["MSFT"]
+    };
+
+    assert.strictEqual(msg.type, "unsubscribed");
+    assert.deepStrictEqual(msg.symbols, ["MSFT"]);
+  });
+
+  it("should parse snapshot message", () => {
+    const msg: WSMessage = {
+      type: "snapshot",
+      symbol: "AAPL",
+      data: {
+        symbol: "AAPL",
+        last: 175.50,
+        lastIsCalculated: false,
+        bid: 175.40,
+        ask: 175.60,
+        bidSize: 120,
+        askSize: 130,
+        volume: 3000000,
+        high: 176.00,
+        low: 174.00,
+        open: 175.00,
+        close: 175.20,
+        timestamp: new Date().toISOString(),
+      }
+    };
+
+    assert.strictEqual(msg.type, "snapshot");
+    assert.strictEqual(msg.symbol, "AAPL");
+    assert.equal(msg.data.last, 175.50);
+  });
+
+  it("should parse pong message", () => {
+    const msg: WSMessage = {
+      type: "pong",
+    };
+
+    assert.strictEqual(msg.type, "pong");
+  });
+
+  it("should parse calculated price message", () => {
+    const msg: WSMessage = {
+      type: "price",
+      symbol: "MSFT",
+      data: {
+        symbol: "MSFT",
+        last: 420.0,
+        lastIsCalculated: true,
+        bid: 419.5,
+        ask: 420.5,
+        bidSize: 150,
+        askSize: 150,
+        volume: 1_000_000,
+        high: 422.0,
+        low: 418.0,
+        open: 420.0,
+        close: 419.8,
+        timestamp: new Date().toISOString(),
+      }
+    };
+
+    assert.equal(msg.data.lastIsCalculated, true);
+  });
+
+  it("should normalize symbols for websocket subscriptions", () => {
+    assert.deepStrictEqual(normalizeSymbolList([" aapl ", "", "MSFT", "nvda"]), ["AAPL", "MSFT", "NVDA"]);
+  });
+
+  it("should generate stable websocket symbol key", () => {
+    assert.strictEqual(symbolKey(["MSFT", "aapl", "NVDA"]), "AAPL,MSFT,NVDA");
+  });
+});
+
+describe("Portfolio calculation flags", () => {
+  const buildLeg = (
+    marketPriceIsCalculated?: boolean
+  ): PortfolioPosition["legs"][number] => ({
+    direction: "LONG",
+    contracts: 1,
+    type: "Stock",
+    strike: null,
+    entry_cost: 100,
+    avg_cost: 100,
+    market_price: 100,
+    market_value: 100,
+    ...(marketPriceIsCalculated == null ? {} : { market_price_is_calculated: marketPriceIsCalculated }),
+  });
+
+  const makePosition = (
+    marketPriceIsCalculated: boolean | undefined,
+    legs: PortfolioPosition["legs"]
+  ): PortfolioPosition => ({
+    id: 1,
+    ticker: "TEST",
+    structure: "Stock",
+    structure_type: "Stock",
+    risk_profile: "equity",
+    expiry: "N/A",
+    contracts: 1,
+    direction: "LONG",
+    entry_cost: 100,
+    max_risk: null,
+    market_value: 100,
+    legs,
+    market_price_is_calculated: marketPriceIsCalculated,
+    kelly_optimal: null,
+    target: null,
+    stop: null,
+    entry_date: "2026-01-01T00:00:00Z",
+  });
+
+  it("prefers explicit position-level calculated flag", () => {
+    const position = makePosition(false, [buildLeg(true)]);
+    assert.strictEqual(getLastPriceIsCalculated(position), false);
+  });
+
+  it("falls back to leg-level flags when position-level flag is missing", () => {
+    const position = makePosition(undefined, [buildLeg(true)]);
+    assert.strictEqual(getLastPriceIsCalculated(position), true);
+  });
+
+  it("returns false when no flags are present", () => {
+    const position = makePosition(undefined, [buildLeg(undefined)]);
+    assert.strictEqual(getLastPriceIsCalculated(position), false);
   });
 });
 

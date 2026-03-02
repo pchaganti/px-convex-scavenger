@@ -125,3 +125,29 @@ test("kelly command returns valid risk sizing JSON", () => {
   assert.equal(typeof payload.fractional_kelly_pct, "number");
   assert.ok(payload.use_size > 0);
 });
+
+test("GET /api/prices returns deprecation response", async () => {
+  const { GET } = await import("../app/api/prices/route");
+
+  const response = await GET();
+  const body = await response.json() as { error?: string };
+
+  assert.equal(response.status, 405);
+  assert.ok(typeof body.error === "string");
+  assert.ok(body.error.includes("deprecated"));
+});
+
+test("POST /api/prices requires symbols payload", async () => {
+  const { POST } = await import("../app/api/prices/route");
+  const request = new NextRequest("http://localhost/api/prices", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({}),
+  });
+
+  const response = await POST(request);
+  const body = await response.json() as { error?: string };
+
+  assert.equal(response.status, 400);
+  assert.equal(body.error, "symbols array required");
+});
