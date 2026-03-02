@@ -37,7 +37,7 @@ export type PiResponse = {
   error?: string;
 };
 
-export type WorkspaceSection = "dashboard" | "flow-analysis" | "portfolio" | "scanner" | "discover" | "journal";
+export type WorkspaceSection = "dashboard" | "flow-analysis" | "portfolio" | "orders" | "scanner" | "discover" | "journal";
 
 export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
 
@@ -76,6 +76,51 @@ export type PortfolioPosition = {
   target: number | null;
   stop: number | null;
   entry_date: string;
+};
+
+export type OrderContract = {
+  symbol: string;
+  secType: string;
+  strike: number | null;
+  right: string | null;
+  expiry: string | null;
+};
+
+export type OpenOrder = {
+  orderId: number;
+  symbol: string;
+  contract: OrderContract;
+  action: string;
+  orderType: string;
+  totalQuantity: number;
+  limitPrice: number | null;
+  auxPrice: number | null;
+  status: string;
+  filled: number;
+  remaining: number;
+  avgFillPrice: number | null;
+  tif: string;
+};
+
+export type ExecutedOrder = {
+  execId: string;
+  symbol: string;
+  contract: OrderContract;
+  side: string;
+  quantity: number;
+  avgPrice: number | null;
+  commission: number | null;
+  realizedPNL: number | null;
+  time: string;
+  exchange: string;
+};
+
+export type OrdersData = {
+  last_sync: string;
+  open_orders: OpenOrder[];
+  executed_orders: ExecutedOrder[];
+  open_count: number;
+  executed_count: number;
 };
 
 export type PortfolioData = {

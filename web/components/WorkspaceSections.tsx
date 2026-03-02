@@ -7,13 +7,14 @@ import {
   ChevronDown,
   ChevronUp,
   Circle,
+  ClipboardList,
   Search,
   Sparkles,
   TrendingDown,
   TriangleAlert,
   Wrench,
 } from "lucide-react";
-import type { PortfolioData, PortfolioPosition, WorkspaceSection } from "@/lib/types";
+import type { ExecutedOrder, OpenOrder, OrdersData, PortfolioData, PortfolioPosition, WorkspaceSection } from "@/lib/types";
 import { against, neutralRows, supports, watchRows } from "@/lib/data";
 import { useSort, type SortDirection } from "@/lib/useSort";
 
@@ -257,9 +258,13 @@ const fmtPrice = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionD
 
 function resolveMarketValue(pos: PortfolioPosition): number | null {
   if (pos.market_value != null) return pos.market_value;
-  // Fallback: sum leg market values when position-level is null
+  // Fallback: sum leg market values when position-level is null (sign-aware)
   const known = pos.legs.filter((l) => l.market_value != null);
-  return known.length > 0 ? known.reduce((s, l) => s + l.market_value!, 0) : null;
+  if (known.length === 0) return null;
+  return known.reduce((s, l) => {
+    const sign = l.direction === "LONG" ? 1 : -1;
+    return s + sign * l.market_value!;
+  }, 0);
 }
 
 function getMultiplier(pos: PortfolioPosition): number {
@@ -310,8 +315,8 @@ function PositionRow({ pos }: { pos: PortfolioPosition }) {
           <td colSpan={2} style={{ paddingLeft: "1.5rem", opacity: 0.7, fontSize: "0.85em" }}>
             {leg.direction} {leg.contracts}x {leg.type}{leg.strike ? ` $${leg.strike}` : ""}
           </td>
-          <td className="right" style={{ opacity: 0.7, fontSize: "0.85em" }}>{fmtPrice(leg.avg_cost / (leg.type === "Stock" ? 1 : 100))}</td>
-          <td className="right" style={{ opacity: 0.7, fontSize: "0.85em" }}>{leg.market_price != null ? fmtPrice(leg.market_price) : "—"}</td>
+          <td className="right" style={{ opacity: 0.7, fontSize: "0.85em" }}>{fmtPrice(Math.abs(leg.avg_cost) / (leg.type === "Stock" ? 1 : 100))}</td>
+          <td className="right" style={{ opacity: 0.7, fontSize: "0.85em" }}>{leg.market_price != null ? fmtPrice(Math.abs(leg.market_price)) : "—"}</td>
           <td className="right" style={{ opacity: 0.7, fontSize: "0.85em" }}>{fmtUsd(leg.entry_cost)}</td>
           <td className="right" style={{ opacity: 0.7, fontSize: "0.85em" }}>{leg.market_value != null ? fmtUsd(leg.market_value) : "—"}</td>
           <td></td>
@@ -549,14 +554,178 @@ function JournalSections() {
   );
 }
 
+/* ─── Orders tables ────────────────────────────────────── */
+
+type OpenOrderKey = "symbol" | "action" | "orderType" | "totalQuantity" | "limitPrice" | "status" | "tif";
+
+const openOrderExtract = (item: OpenOrder, key: OpenOrderKey): string | number | null => {
+  switch (key) {
+    case "symbol": return item.symbol;
+    case "action": return item.action;
+    case "orderType": return item.orderType;
+    case "totalQuantity": return item.totalQuantity;
+    case "limitPrice": return item.limitPrice;
+    case "status": return item.status;
+    case "tif": return item.tif;
+    default: return null;
+  }
+};
+
+type ExecOrderKey = "symbol" | "side" | "quantity" | "avgPrice" | "commission" | "realizedPNL" | "time";
+
+const execOrderExtract = (item: ExecutedOrder, key: ExecOrderKey): string | number | null => {
+  switch (key) {
+    case "symbol": return item.symbol;
+    case "side": return item.side;
+    case "quantity": return item.quantity;
+    case "avgPrice": return item.avgPrice;
+    case "commission": return item.commission;
+    case "realizedPNL": return item.realizedPNL;
+    case "time": return item.time;
+    default: return null;
+  }
+};
+
+function OrdersSections({ orders }: { orders: OrdersData | null }) {
+  const openSort = useSort(orders?.open_orders ?? [], openOrderExtract);
+  const execSort = useSort<ExecutedOrder, ExecOrderKey>(orders?.executed_orders ?? [], execOrderExtract, "time", "desc");
+
+  if (!orders) {
+    return (
+      <div className="section">
+        <div className="section-header">
+          <div className="section-title">
+            <ClipboardList size={14} />
+            Orders
+          </div>
+          <span className="pill neutral">LOADING</span>
+        </div>
+        <div className="section-body">
+          <div className="alert-item">Waiting for orders data...</div>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <>
+      <div className="section">
+        <div className="section-header">
+          <div className="section-title">
+            <ClipboardList size={14} />
+            Open Orders
+          </div>
+          <span className="pill defined">{orders.open_count} ORDERS</span>
+        </div>
+        <div className="section-body">
+          {orders.open_orders.length === 0 ? (
+            <div className="alert-item">No open orders</div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <SortTh<OpenOrderKey> label="Symbol" sortKey="symbol" activeKey={openSort.sort.key} direction={openSort.sort.direction} onToggle={openSort.toggle} />
+                  <SortTh<OpenOrderKey> label="Action" sortKey="action" activeKey={openSort.sort.key} direction={openSort.sort.direction} onToggle={openSort.toggle} />
+                  <SortTh<OpenOrderKey> label="Type" sortKey="orderType" activeKey={openSort.sort.key} direction={openSort.sort.direction} onToggle={openSort.toggle} />
+                  <SortTh<OpenOrderKey> label="Quantity" sortKey="totalQuantity" className="right" activeKey={openSort.sort.key} direction={openSort.sort.direction} onToggle={openSort.toggle} />
+                  <SortTh<OpenOrderKey> label="Limit Price" sortKey="limitPrice" className="right" activeKey={openSort.sort.key} direction={openSort.sort.direction} onToggle={openSort.toggle} />
+                  <SortTh<OpenOrderKey> label="Status" sortKey="status" activeKey={openSort.sort.key} direction={openSort.sort.direction} onToggle={openSort.toggle} />
+                  <SortTh<OpenOrderKey> label="TIF" sortKey="tif" activeKey={openSort.sort.key} direction={openSort.sort.direction} onToggle={openSort.toggle} />
+                </tr>
+              </thead>
+              <tbody>
+                {openSort.sorted.map((o) => (
+                  <tr key={o.orderId}>
+                    <td><strong>{o.symbol}</strong></td>
+                    <td>
+                      <span className={`pill ${o.action === "BUY" ? "accum" : "distrib"}`}>
+                        {o.action}
+                      </span>
+                    </td>
+                    <td>{o.orderType}</td>
+                    <td className="right">{o.totalQuantity}</td>
+                    <td className="right">{o.limitPrice != null ? fmtPrice(o.limitPrice) : "—"}</td>
+                    <td>{o.status}</td>
+                    <td>{o.tif}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      <div className="section">
+        <div className="section-header">
+          <div className="section-title">
+            <CheckCircle2 size={14} />
+            Executed Orders
+          </div>
+          <span className="pill neutral">{orders.executed_count} FILLS</span>
+        </div>
+        <div className="section-body">
+          {orders.executed_orders.length === 0 ? (
+            <div className="alert-item">No fills this session</div>
+          ) : (
+            <table>
+              <thead>
+                <tr>
+                  <SortTh<ExecOrderKey> label="Symbol" sortKey="symbol" activeKey={execSort.sort.key} direction={execSort.sort.direction} onToggle={execSort.toggle} />
+                  <SortTh<ExecOrderKey> label="Action" sortKey="side" activeKey={execSort.sort.key} direction={execSort.sort.direction} onToggle={execSort.toggle} />
+                  <SortTh<ExecOrderKey> label="Quantity" sortKey="quantity" className="right" activeKey={execSort.sort.key} direction={execSort.sort.direction} onToggle={execSort.toggle} />
+                  <SortTh<ExecOrderKey> label="Avg Fill Price" sortKey="avgPrice" className="right" activeKey={execSort.sort.key} direction={execSort.sort.direction} onToggle={execSort.toggle} />
+                  <SortTh<ExecOrderKey> label="Commission" sortKey="commission" className="right" activeKey={execSort.sort.key} direction={execSort.sort.direction} onToggle={execSort.toggle} />
+                  <SortTh<ExecOrderKey> label="Realized P&L" sortKey="realizedPNL" className="right" activeKey={execSort.sort.key} direction={execSort.sort.direction} onToggle={execSort.toggle} />
+                  <SortTh<ExecOrderKey> label="Time" sortKey="time" activeKey={execSort.sort.key} direction={execSort.sort.direction} onToggle={execSort.toggle} />
+                </tr>
+              </thead>
+              <tbody>
+                {execSort.sorted.map((e) => {
+                  const displaySide = e.side === "BOT" ? "BUY" : e.side === "SLD" ? "SELL" : e.side;
+                  return (
+                    <tr key={e.execId}>
+                      <td><strong>{e.symbol}</strong></td>
+                      <td>
+                        <span className={`pill ${displaySide === "BUY" ? "accum" : "distrib"}`}>
+                          {displaySide}
+                        </span>
+                      </td>
+                      <td className="right">{e.quantity}</td>
+                      <td className="right">{e.avgPrice != null ? fmtPrice(e.avgPrice) : "—"}</td>
+                      <td className="right">{e.commission != null ? fmtPrice(e.commission) : "—"}</td>
+                      <td className={`right ${e.realizedPNL != null ? (e.realizedPNL >= 0 ? "positive" : "negative") : ""}`}>
+                        {e.realizedPNL != null ? `${e.realizedPNL >= 0 ? "+" : ""}${fmtPrice(e.realizedPNL)}` : "—"}
+                      </td>
+                      <td>{new Date(e.time).toLocaleTimeString()}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          )}
+        </div>
+      </div>
+
+      {orders.last_sync && (
+        <div className="section">
+          <div className="report-meta">
+            Last Sync: {new Date(orders.last_sync).toLocaleString()} • Source: IB Gateway (4001)
+          </div>
+        </div>
+      )}
+    </>
+  );
+}
+
 /* ─── Root switch ───────────────────────────────────────── */
 
 type WorkspaceSectionsProps = {
   section: WorkspaceSection;
   portfolio?: PortfolioData | null;
+  orders?: OrdersData | null;
 };
 
-export default function WorkspaceSections({ section, portfolio }: WorkspaceSectionsProps) {
+export default function WorkspaceSections({ section, portfolio, orders }: WorkspaceSectionsProps) {
   switch (section) {
     case "dashboard":
       return null;
@@ -564,6 +733,8 @@ export default function WorkspaceSections({ section, portfolio }: WorkspaceSecti
       return <FlowSections />;
     case "portfolio":
       return <PortfolioSections portfolio={portfolio ?? null} />;
+    case "orders":
+      return <OrdersSections orders={orders ?? null} />;
     case "scanner":
       return <ScannerSections />;
     case "discover":

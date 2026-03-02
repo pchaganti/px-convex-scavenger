@@ -182,10 +182,21 @@ def collapse_positions(positions: list) -> list:
         structure_type, risk_profile = detect_structure_type(legs)
         structure_desc = format_structure_description(structure_type, legs)
         
-        # Calculate aggregate values
-        total_entry_cost = sum(l['entry_cost'] for l in legs)
-        known_values = [l['marketValue'] for l in legs if l.get('marketValue') is not None]
-        total_market_value = sum(known_values) if known_values else None
+        # Calculate aggregate values — sign-aware (short legs are credits)
+        total_entry_cost = 0
+        for leg in legs:
+            if leg['position'] > 0:
+                total_entry_cost += leg['entry_cost']
+            else:
+                total_entry_cost -= leg['entry_cost']
+
+        known_mv = []
+        for leg in legs:
+            mv = leg.get('marketValue')
+            if mv is not None:
+                sign = 1 if leg['position'] > 0 else -1
+                known_mv.append(sign * mv)
+        total_market_value = sum(known_mv) if known_mv else None
         
         # Net contracts (for spreads, use the long leg count)
         long_legs = [l for l in legs if l['position'] > 0]

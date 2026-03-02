@@ -7,6 +7,7 @@ import type { WorkspaceSection } from "@/lib/types";
 import { navItems } from "@/lib/data";
 import { resolveSectionFromPath } from "@/lib/chat";
 import { usePortfolio } from "@/lib/usePortfolio";
+import { useOrders } from "@/lib/useOrders";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
 import ChatPanel from "@/components/ChatPanel";
@@ -22,7 +23,15 @@ export default function WorkspaceShell({ section }: WorkspaceShellProps) {
   const pathname = usePathname();
   const activeSection: WorkspaceSection = section ?? resolveSectionFromPath(pathname, "dashboard");
   const activeLabel = navItems.find((item) => item.route === activeSection)?.label ?? "Dashboard";
-  const { data: portfolio, syncing, error, lastSync, syncNow } = usePortfolio();
+  const { data: portfolio, syncing: portfolioSyncing, error: portfolioError, lastSync: portfolioLastSync, syncNow: portfolioSyncNow } = usePortfolio();
+  const { data: orders, syncing: ordersSyncing, error: ordersError, lastSync: ordersLastSync, syncNow: ordersSyncNow } = useOrders();
+
+  const isOrdersPage = activeSection === "orders";
+  const syncing = isOrdersPage ? ordersSyncing : portfolioSyncing;
+  const error = isOrdersPage ? ordersError : portfolioError;
+  const lastSync = isOrdersPage ? ordersLastSync : portfolioLastSync;
+  const syncNow = isOrdersPage ? ordersSyncNow : portfolioSyncNow;
+  const syncTarget = isOrdersPage ? "orders" : "portfolio";
 
   useEffect(() => {
     const saved = localStorage.getItem("theme");
@@ -70,7 +79,7 @@ export default function WorkspaceShell({ section }: WorkspaceShellProps) {
               className="sync-button"
               onClick={syncNow}
               disabled={syncing}
-              title="Sync portfolio from IB Gateway"
+              title={`Sync ${syncTarget} from IB Gateway`}
             >
               <RefreshCw size={14} className={syncing ? "spin" : ""} />
               {syncing ? "Syncing..." : "Sync Now"}
@@ -84,7 +93,7 @@ export default function WorkspaceShell({ section }: WorkspaceShellProps) {
           {activeSection !== "dashboard" ? <MetricCards portfolio={portfolio} /> : null}
 
           {activeSection !== "dashboard" ? (
-            <WorkspaceSections section={activeSection} portfolio={portfolio} />
+            <WorkspaceSections section={activeSection} portfolio={portfolio} orders={orders} />
           ) : null}
         </div>
       </main>
