@@ -590,24 +590,41 @@ Identifies long-dated options where implied volatility diverges from realized vo
 
 ```bash
 # Scan specific tickers
-python3 scripts/leap_iv_scanner.py AAPL MSFT NVDA EWY
+python3 scripts/leap_scanner_uw.py AAPL MSFT NVDA EWY
 
 # Use presets
-python3 scripts/leap_iv_scanner.py --preset sectors    # State Street sector ETFs
-python3 scripts/leap_iv_scanner.py --preset mag7       # Magnificent 7
-python3 scripts/leap_iv_scanner.py --preset semis      # Semiconductors
-python3 scripts/leap_iv_scanner.py --preset emerging   # Emerging market ETFs
+python3 scripts/leap_scanner_uw.py --preset sectors    # S&P 500 sector ETFs
+python3 scripts/leap_scanner_uw.py --preset mag7       # Magnificent 7
+python3 scripts/leap_scanner_uw.py --preset semis      # Semiconductors
+python3 scripts/leap_scanner_uw.py --preset row        # Rest of World country ETFs
+python3 scripts/leap_scanner_uw.py --preset metals     # Gold, Silver, Copper, Miners
+python3 scripts/leap_scanner_uw.py --preset energy     # Oil, Gas, Refiners, MLPs
 
 # Custom parameters
-python3 scripts/leap_iv_scanner.py --min-gap 20 --years 2027 2028
+python3 scripts/leap_scanner_uw.py --min-gap 20
 
-# Scan portfolio holdings for IV opportunities
-python3 scripts/leap_iv_scanner.py --portfolio
+# IB version (requires TWS/Gateway)
+python3 scripts/leap_iv_scanner.py AAPL --portfolio
 ```
 
-**Available Presets:** `sectors`, `mag7`, `semis`, `financials`, `energy`, `china`, `emerging`
+**Available Presets:**
 
-**Output:** HTML report at `reports/leap-iv-scan.html`
+| Preset | Description | Count |
+|--------|-------------|-------|
+| `sectors` | S&P 500 sector ETFs (XLK, XLE, XLF, etc.) | 11 |
+| `mag7` | Magnificent 7 (AAPL, MSFT, NVDA, etc.) | 7 |
+| `semis` | Semiconductors (NVDA, AMD, TSM, etc.) | 9 |
+| `emerging` | Emerging market ETFs (EEM, EWZ, FXI, etc.) | 8 |
+| `china` | China stocks and ETFs (BABA, FXI, KWEB, etc.) | 9 |
+| `row` | Rest of World: All country-specific ETFs | 45 |
+| `row-americas` | Americas (Canada, Mexico, Brazil, Chile, Argentina) | 5 |
+| `row-europe` | Europe (UK, Germany, France, etc.) | 17 |
+| `row-asia` | Asia-Pacific (Japan, Korea, Taiwan, India, etc.) | 15 |
+| `row-mena` | Middle East & Africa (Israel, South Africa, Saudi, etc.) | 5 |
+| `metals` | Precious metals, base metals, miners, uranium | 23 |
+| `energy` | Oil, natural gas, refiners, MLPs, clean energy | 24 |
+
+**Output:** HTML report at `reports/leap-scan-uw.html`
 
 See `docs/strategies.md` for full methodology.
 

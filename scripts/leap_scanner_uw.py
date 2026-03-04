@@ -19,6 +19,23 @@ Usage:
   python3 scripts/leap_scanner_uw.py XLK XLE XLF
   python3 scripts/leap_scanner_uw.py --preset sectors
   python3 scripts/leap_scanner_uw.py --preset mag7 --min-gap 20
+  python3 scripts/leap_scanner_uw.py --preset row          # All country ETFs
+  python3 scripts/leap_scanner_uw.py --preset row-europe   # European country ETFs
+  python3 scripts/leap_scanner_uw.py --preset row-asia     # Asian country ETFs
+
+Presets:
+  sectors      - S&P 500 sector ETFs (XLK, XLE, XLF, etc.)
+  mag7         - Magnificent 7 (AAPL, MSFT, NVDA, etc.)
+  semis        - Semiconductors (NVDA, AMD, TSM, etc.)
+  emerging     - Emerging market ETFs (EEM, EWZ, FXI, etc.)
+  china        - China stocks and ETFs (BABA, FXI, KWEB, etc.)
+  row          - Rest of World: 45 country-specific ETFs
+  row-americas - Americas only (EWC, EWW, EWZ, etc.)
+  row-europe   - Europe only (EWU, EWG, EWQ, etc.)
+  row-asia     - Asia-Pacific only (EWJ, EWY, INDA, etc.)
+  row-mena     - Middle East & Africa (EIS, EZA, KSA, etc.)
+  metals       - Metals & Mining: Gold, Silver, Copper, Uranium, Miners
+  energy       - Energy: Oil, Natural Gas, Refiners, MLPs, Clean Energy
 """
 
 import argparse
@@ -40,6 +57,125 @@ PRESETS = {
     "semis": ["NVDA", "AMD", "INTC", "AVGO", "QCOM", "MU", "AMAT", "LRCX", "TSM"],
     "emerging": ["EEM", "EWZ", "EWY", "EWT", "INDA", "FXI", "EWW", "ILF"],
     "china": ["BABA", "JD", "PDD", "BIDU", "NIO", "XPEV", "LI", "FXI", "KWEB"],
+    # Rest of World - Country-specific ETFs
+    "row": [
+        # Americas
+        "EWC",   # Canada
+        "EWW",   # Mexico
+        "EWZ",   # Brazil
+        "ECH",   # Chile
+        "ARGT",  # Argentina
+        # Europe - Western
+        "EWU",   # United Kingdom
+        "EWG",   # Germany
+        "EWQ",   # France
+        "EWI",   # Italy
+        "EWP",   # Spain
+        "EWL",   # Switzerland
+        "EWN",   # Netherlands
+        "EWK",   # Belgium
+        "EWO",   # Austria
+        "EIRL",  # Ireland
+        # Europe - Nordic
+        "EWD",   # Sweden
+        "NORW",  # Norway
+        "EDEN",  # Denmark
+        "EFNL",  # Finland
+        # Europe - Eastern/Other
+        "EPOL",  # Poland
+        "GREK",  # Greece
+        "TUR",   # Turkey
+        # Asia Pacific - Developed
+        "EWJ",   # Japan
+        "EWY",   # South Korea
+        "EWT",   # Taiwan
+        "EWA",   # Australia
+        "EWH",   # Hong Kong
+        "EWS",   # Singapore
+        # Asia Pacific - Emerging
+        "FXI",   # China Large Cap
+        "KWEB",  # China Internet
+        "MCHI",  # China (broader)
+        "INDA",  # India
+        "EPI",   # India (WisdomTree)
+        "EWM",   # Malaysia
+        "THD",   # Thailand
+        "VNM",   # Vietnam
+        "EIDO",  # Indonesia
+        # Middle East / Africa
+        "EIS",   # Israel
+        "EZA",   # South Africa
+        "KSA",   # Saudi Arabia
+        "UAE",   # United Arab Emirates
+        "QAT",   # Qatar
+    ],
+    # Subsets of RoW for targeted scans
+    "row-americas": ["EWC", "EWW", "EWZ", "ECH", "ARGT"],
+    "row-europe": ["EWU", "EWG", "EWQ", "EWI", "EWP", "EWL", "EWN", "EWK", "EWO", "EIRL", "EWD", "NORW", "EDEN", "EFNL", "EPOL", "GREK", "TUR"],
+    "row-asia": ["EWJ", "EWY", "EWT", "EWA", "EWH", "EWS", "FXI", "KWEB", "MCHI", "INDA", "EPI", "EWM", "THD", "VNM", "EIDO"],
+    "row-mena": ["EIS", "EZA", "KSA", "UAE", "QAT"],
+    # Metals - Commodities and Miners
+    "metals": [
+        # Physical / Spot ETFs
+        "GLD",   # Gold (SPDR)
+        "IAU",   # Gold (iShares)
+        "GLDM",  # Gold Mini (SPDR)
+        "SLV",   # Silver (iShares)
+        "SIVR",  # Silver (abrdn)
+        "PPLT",  # Platinum (abrdn)
+        "PALL",  # Palladium (abrdn)
+        "CPER",  # Copper (United States Copper)
+        "DBB",   # Base Metals (DB)
+        "DBA",   # Agriculture (DB) - included for commodity correlation
+        # Gold Miners
+        "GDX",   # Gold Miners (VanEck)
+        "GDXJ",  # Junior Gold Miners (VanEck)
+        "RING",  # Gold Miners (iShares)
+        "GOAU",  # Gold Miners (US Global)
+        # Silver Miners
+        "SIL",   # Silver Miners (Global X)
+        "SILJ",  # Junior Silver Miners (ETFMG)
+        # Broad Mining / Materials
+        "XME",   # Metals & Mining (SPDR)
+        "PICK",  # Global Metals & Mining (iShares)
+        "COPX",  # Copper Miners (Global X)
+        "LIT",   # Lithium & Battery Tech (Global X)
+        "REMX",  # Rare Earth / Strategic Metals (VanEck)
+        "URA",   # Uranium (Global X)
+        "URNM",  # Uranium Miners (Sprott)
+    ],
+    # Energy - Oil, Gas, Refiners, Infrastructure
+    "energy": [
+        # Broad Energy
+        "XLE",   # Energy Select Sector (SPDR)
+        "VDE",   # Energy (Vanguard)
+        "IYE",   # US Energy (iShares)
+        "XOP",   # Oil & Gas E&P (SPDR)
+        "IEO",   # US Oil & Gas E&P (iShares)
+        # Oil
+        "USO",   # Oil Fund (United States)
+        "BNO",   # Brent Oil (United States)
+        "DBO",   # Oil Fund (DB)
+        "OIH",   # Oil Services (VanEck)
+        "IEZ",   # US Oil Equipment & Services (iShares)
+        # Natural Gas
+        "UNG",   # Natural Gas Fund (United States)
+        "BOIL",  # 2x Natural Gas (ProShares)
+        "FCG",   # Natural Gas (First Trust)
+        # Refiners / Downstream
+        "CRAK",  # Oil Refiners (VanEck)
+        "PXE",   # Energy E&P (Invesco)
+        # MLPs / Midstream / Infrastructure
+        "AMLP",  # MLP (Alerian)
+        "MLPA",  # MLP (Global X)
+        "EMLP",  # Energy Infrastructure (First Trust)
+        "TPYP",  # Midstream Energy (Tortoise)
+        # Clean Energy (for comparison)
+        "ICLN",  # Global Clean Energy (iShares)
+        "TAN",   # Solar (Invesco)
+        "QCLN",  # Clean Energy (First Trust)
+        "PBW",   # Clean Energy (Invesco)
+    ],
 }
 
 UW_BASE_URL = "https://api.unusualwhales.com/api"
