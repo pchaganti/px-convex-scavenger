@@ -7,6 +7,8 @@ convenience ``connect_ib`` helper used by every IB script.
 from ib_insync import IB
 
 # Client-ID registry — each script gets a unique ID to avoid conflicts.
+# NOTE: clientId=0 is the MASTER client — can manage ALL orders including those
+# placed via TWS. Use for cancel/modify operations that need global access.
 CLIENT_IDS: dict = {
     "ib_sync": 1,
     "ib_order": 2,
@@ -15,7 +17,7 @@ CLIENT_IDS: dict = {
     "exit_order_service": 60,
     "ib_reconcile": 90,
     "fetch_analyst_ratings": 99,
-    "ib_order_manage": 12,
+    "ib_order_manage": 0,  # Master client — can cancel ANY order
     "ib_realtime_server": 100,
 }
 

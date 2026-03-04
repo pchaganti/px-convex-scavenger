@@ -515,6 +515,7 @@ IB_SENTINEL = 1.7976931348623157e308  # IB uses this for "no value" (DBL_MAX)
 
 | ID | Script | Purpose |
 |---:|--------|---------|
+| **0** | `ib_order_manage.py` | **Master client** — cancel/modify ANY order |
 | 1 | `ib_sync.py` | Portfolio sync |
 | 2 | `ib_order.py` | Order placement |
 | 11 | `ib_orders.py` | Order sync |
@@ -524,3 +525,14 @@ IB_SENTINEL = 1.7976931348623157e308  # IB uses this for "no value" (DBL_MAX)
 | 99 | `fetch_analyst_ratings.py` | Analyst data |
 | 100 | `ib_realtime_server.py` | Real-time streaming (Python) |
 | 101 | `ib_realtime_server.js` | Real-time streaming (Node.js) |
+
+### Master Client (clientId=0)
+
+The **master client** has special privileges:
+- Can see ALL open orders from all clients (including TWS)
+- Can cancel ANY order regardless of which client placed it
+- Can modify ANY order
+
+**Important:** Only ONE connection can use `clientId=0` at a time. If TWS is using it, the API connection will be rejected (or vice versa).
+
+Use `ib_order_manage.py` for cancel/modify operations — it connects as master to handle TWS-placed orders.
