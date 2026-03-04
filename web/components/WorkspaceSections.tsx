@@ -19,6 +19,7 @@ import {
   XCircle,
 } from "lucide-react";
 import type { ExecutedOrder, OpenOrder, OrdersData, PortfolioData, PortfolioPosition, WorkspaceSection } from "@/lib/types";
+import { useCancelOrders, type CancelledOrder } from "@/lib/CancelOrdersContext";
 import type { PriceData } from "@/lib/pricesProtocol";
 import { optionKey } from "@/lib/pricesProtocol";
 import { against, neutralRows, supports, watchRows } from "@/lib/data";
@@ -827,20 +828,6 @@ const execOrderExtract = (item: ExecutedOrder, key: ExecOrderKey): string | numb
   }
 };
 
-/** Snapshot of a cancelled order for the executed table */
-type CancelledOrder = {
-  permId: number;
-  symbol: string;
-  action: string;
-  orderType: string;
-  totalQuantity: number;
-  limitPrice: number | null;
-  cancelledAt: string; // ISO timestamp
-};
-
-const CANCEL_POLL_MS = 5_000;
-const CANCEL_POLL_MAX = 24; // max polls before giving up (~2 min)
-
 function OrdersSections({
   orders,
   prices,
@@ -854,129 +841,20 @@ function OrdersSections({
   syncNow?: () => void;
   onOrdersUpdate?: (data: OrdersData) => void;
 }) {
+  const { pendingCancels, cancelledOrders, requestCancel } = useCancelOrders();
   const openSort = useSort(orders?.open_orders ?? [], openOrderExtract);
 
   const [cancelTarget, setCancelTarget] = useState<OpenOrder | null>(null);
   const [modifyTarget, setModifyTarget] = useState<OpenOrder | null>(null);
   const [actionLoading, setActionLoading] = useState(false);
 
-  // Pending cancel tracking: permId -> order snapshot
-  const [pendingCancels, setPendingCancels] = useState<Map<number, OpenOrder>>(new Map());
-  // Confirmed cancelled orders (displayed in executed table)
-  const [cancelledOrders, setCancelledOrders] = useState<CancelledOrder[]>([]);
-  // Ref to track active poll intervals
-  const pollTimersRef = useRef<Map<number, ReturnType<typeof setInterval>>>(new Map());
-  const pollCountsRef = useRef<Map<number, number>>(new Map());
-
-  // Poll for cancel confirmation: check if order disappeared from open_orders
-  const startCancelPoll = useCallback((order: OpenOrder) => {
-    const permId = order.permId;
-    pollCountsRef.current.set(permId, 0);
-
-    const interval = setInterval(async () => {
-      const count = (pollCountsRef.current.get(permId) ?? 0) + 1;
-      pollCountsRef.current.set(permId, count);
-
-      try {
-        // POST triggers a fresh IB sync (GET just reads stale cached file)
-        const res = await fetch("/api/orders", { method: "POST" });
-        if (!res.ok) return;
-        const data = (await res.json()) as OrdersData;
-
-        // Check if the order is still in open_orders
-        const stillOpen = data.open_orders.some(
-          (o) => o.permId === permId || (o.orderId === order.orderId && order.orderId !== 0),
-        );
-
-        if (!stillOpen) {
-          // Order confirmed cancelled — stop polling
-          clearInterval(interval);
-          pollTimersRef.current.delete(permId);
-          pollCountsRef.current.delete(permId);
-
-          // Remove from pending, add to cancelled
-          setPendingCancels((prev) => {
-            const next = new Map(prev);
-            next.delete(permId);
-            return next;
-          });
-          setCancelledOrders((prev) => [
-            {
-              permId,
-              symbol: order.symbol,
-              action: order.action,
-              orderType: order.orderType,
-              totalQuantity: order.totalQuantity,
-              limitPrice: order.limitPrice,
-              cancelledAt: new Date().toISOString(),
-            },
-            ...prev,
-          ]);
-
-          // Update orders data so the row disappears
-          onOrdersUpdate?.(data);
-          addToast?.("success", `${order.symbol} order cancelled`);
-        } else if (count >= CANCEL_POLL_MAX) {
-          // Timed out after ~2 min — clear pending state, show error, prompt retry
-          clearInterval(interval);
-          pollTimersRef.current.delete(permId);
-          pollCountsRef.current.delete(permId);
-          setPendingCancels((prev) => {
-            const next = new Map(prev);
-            next.delete(permId);
-            return next;
-          });
-          onOrdersUpdate?.(data);
-          addToast?.("error", `${order.symbol} cancellation failed — order still open. Try cancelling again.`, 0);
-        } else {
-          // Still open, update data to reflect any status changes
-          onOrdersUpdate?.(data);
-        }
-      } catch {
-        // Network error, keep polling
-      }
-    }, CANCEL_POLL_MS);
-
-    pollTimersRef.current.set(permId, interval);
-  }, [addToast, onOrdersUpdate]);
-
-  // Cleanup poll timers on unmount
-  useEffect(() => {
-    return () => {
-      for (const timer of pollTimersRef.current.values()) {
-        clearInterval(timer);
-      }
-    };
-  }, []);
-
   const handleCancel = useCallback(async () => {
     if (!cancelTarget) return;
     setActionLoading(true);
-    try {
-      const res = await fetch("/api/orders/cancel", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: cancelTarget.orderId, permId: cancelTarget.permId }),
-      });
-      const json = await res.json();
-      if (!res.ok) {
-        addToast?.("error", json.error || "Cancel failed");
-      } else {
-        // Add to pending cancels and start polling
-        const order = cancelTarget;
-        setPendingCancels((prev) => new Map(prev).set(order.permId, order));
-        startCancelPoll(order);
-
-        // Update orders data if returned
-        if (json.orders) onOrdersUpdate?.(json.orders);
-      }
-    } catch {
-      addToast?.("error", "Cancel request failed");
-    } finally {
-      setActionLoading(false);
-      setCancelTarget(null);
-    }
-  }, [cancelTarget, addToast, onOrdersUpdate, startCancelPoll]);
+    await requestCancel(cancelTarget);
+    setActionLoading(false);
+    setCancelTarget(null);
+  }, [cancelTarget, requestCancel]);
 
   const handleModify = useCallback(async (newPrice: number) => {
     if (!modifyTarget) return;

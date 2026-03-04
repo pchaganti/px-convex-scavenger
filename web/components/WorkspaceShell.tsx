@@ -9,6 +9,7 @@ import { resolveSectionFromPath } from "@/lib/chat";
 import { usePortfolio } from "@/lib/usePortfolio";
 import { useOrders } from "@/lib/useOrders";
 import { useToast } from "@/lib/useToast";
+import { useCancelOrders } from "@/lib/CancelOrdersContext";
 import { usePrices } from "@/lib/usePrices";
 import { usePreviousClose } from "@/lib/usePreviousClose";
 import { type OptionContract, portfolioLegToContract } from "@/lib/pricesProtocol";
@@ -66,6 +67,9 @@ export default function WorkspaceShell({ section }: WorkspaceShellProps) {
     prevIbConnectedRef.current = ibConnected;
   }, [ibConnected, addToast]);
 
+  // Bridge cancel-orders context → toasts & orders updater
+  const { drainNotifications, setOrdersUpdater } = useCancelOrders();
+
   const isOrdersPage = activeSection === "orders";
   const { data: orders, syncing: ordersSyncing, error: ordersError, lastSync: ordersLastSync, syncNow: ordersSyncNow, updateData: updateOrdersData } = useOrders(isOrdersPage);
   const syncing = isOrdersPage ? ordersSyncing : portfolioSyncing;
@@ -73,6 +77,21 @@ export default function WorkspaceShell({ section }: WorkspaceShellProps) {
   const lastSync = isOrdersPage ? ordersLastSync : portfolioLastSync;
   const syncNow = isOrdersPage ? ordersSyncNow : portfolioSyncNow;
   const syncTarget = isOrdersPage ? "orders" : "portfolio";
+
+  // Register the orders-data updater so the cancel provider can push fresh data
+  useEffect(() => {
+    setOrdersUpdater(updateOrdersData);
+    return () => setOrdersUpdater(null);
+  }, [setOrdersUpdater, updateOrdersData]);
+
+  // Drain cancel-context notifications into the toast system
+  useEffect(() => {
+    const id = setInterval(() => {
+      const notes = drainNotifications();
+      for (const n of notes) addToast(n.type, n.message, n.duration);
+    }, 500);
+    return () => clearInterval(id);
+  }, [drainNotifications, addToast]);
 
   useEffect(() => {
     const saved = localStorage.getItem("theme");
