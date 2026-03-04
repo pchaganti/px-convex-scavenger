@@ -229,6 +229,21 @@ npm run lint
 npm run test:ib
 ```
 
+## Documentation
+
+API specifications, strategy docs, and implementation notes live in the project root `docs/` directory (`../docs/` from here):
+
+| File | Description |
+|------|-------------|
+| `docs/unusual_whales_api.md` | Unusual Whales API reference |
+| `docs/unusual_whales_api_spec.yaml` | UW OpenAPI spec |
+| `docs/ib_tws_api.md` | Interactive Brokers TWS/Gateway API |
+| `docs/strategies.md` | Trading strategy documentation |
+| `docs/status.md` | Current portfolio status and recent evaluations |
+| `docs/plans.md` | Implementation plans |
+| `docs/implement.md` | Implementation notes |
+| `docs/prompt.md` | System prompt reference |
+
 ## Troubleshooting
 
 ### IB Connection Issues

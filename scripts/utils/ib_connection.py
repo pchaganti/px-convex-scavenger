@@ -6,19 +6,31 @@ convenience ``connect_ib`` helper used by every IB script.
 
 from ib_insync import IB
 
-# Client-ID registry — each script gets a unique ID to avoid conflicts.
-# NOTE: clientId=0 is the MASTER client — can manage ALL orders including those
-# placed via TWS. Use for cancel/modify operations that need global access.
+# Client-ID registry for IB connections.
+#
+# STRATEGY: Use clientId=0 (master) by default for full order control.
+# Only use unique IDs when concurrent connections are required.
+#
+# clientId=0 (MASTER):
+#   - Can cancel/modify ANY order (including TWS-placed orders)
+#   - Full account visibility
+#   - Only ONE connection can use clientId=0 at a time
+#
+# clientId=1-999:
+#   - Can only manage orders placed with same clientId
+#   - Multiple concurrent connections allowed
+#   - Use for long-running services (streaming, monitoring)
+#
 CLIENT_IDS: dict = {
-    "ib_sync": 1,
-    "ib_order": 2,
-    "ib_orders": 11,
-    "ib_fill_monitor": 52,
-    "exit_order_service": 60,
-    "ib_reconcile": 90,
-    "fetch_analyst_ratings": 99,
-    "ib_order_manage": 0,  # Master client — can cancel ANY order
-    "ib_realtime_server": 100,
+    "ib_order_manage": 0,   # Master — cancel/modify any order
+    "ib_sync": 0,           # Master — needs full position visibility
+    "ib_orders": 0,         # Master — needs to see all orders
+    "ib_reconcile": 0,      # Master — needs full account access
+    "ib_order": 2,          # Unique — order placement (tags orders)
+    "ib_fill_monitor": 52,  # Unique — long-running monitor service
+    "exit_order_service": 60,  # Unique — background daemon
+    "fetch_analyst_ratings": 99,  # Unique — may run concurrently
+    "ib_realtime_server": 100,    # Unique — persistent streaming
 }
 
 DEFAULT_HOST = "127.0.0.1"

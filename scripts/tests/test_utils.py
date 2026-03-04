@@ -217,25 +217,39 @@ class TestClientIds:
     def test_registry_has_all_entries(self):
         from utils.ib_connection import CLIENT_IDS
         expected_keys = {
-            "ib_sync", "ib_order", "ib_orders", "ib_fill_monitor",
-            "exit_order_service", "ib_reconcile", "fetch_analyst_ratings",
-            "ib_realtime_server"
+            "ib_order_manage", "ib_sync", "ib_order", "ib_orders", 
+            "ib_fill_monitor", "exit_order_service", "ib_reconcile", 
+            "fetch_analyst_ratings", "ib_realtime_server"
         }
         assert set(CLIENT_IDS.keys()) == expected_keys
 
-    def test_all_ids_are_unique(self):
+    def test_nonzero_ids_are_unique(self):
+        """Non-master client IDs must be unique to avoid conflicts."""
         from utils.ib_connection import CLIENT_IDS
-        ids = list(CLIENT_IDS.values())
-        assert len(ids) == len(set(ids))
+        nonzero_ids = [v for v in CLIENT_IDS.values() if v != 0]
+        assert len(nonzero_ids) == len(set(nonzero_ids)), "Non-zero client IDs must be unique"
+    
+    def test_master_client_scripts(self):
+        """Scripts that need full order control should use clientId=0."""
+        from utils.ib_connection import CLIENT_IDS
+        master_scripts = [k for k, v in CLIENT_IDS.items() if v == 0]
+        # These scripts need master client for cancel/modify operations
+        assert "ib_order_manage" in master_scripts
+        assert "ib_sync" in master_scripts
+        assert "ib_orders" in master_scripts
+        assert "ib_reconcile" in master_scripts
 
     def test_specific_ids(self):
         from utils.ib_connection import CLIENT_IDS
-        assert CLIENT_IDS["ib_sync"] == 1
+        # Master client (0) for full order control
+        assert CLIENT_IDS["ib_order_manage"] == 0
+        assert CLIENT_IDS["ib_sync"] == 0
+        assert CLIENT_IDS["ib_orders"] == 0
+        assert CLIENT_IDS["ib_reconcile"] == 0
+        # Unique IDs for concurrent/long-running services
         assert CLIENT_IDS["ib_order"] == 2
-        assert CLIENT_IDS["ib_orders"] == 11
         assert CLIENT_IDS["ib_fill_monitor"] == 52
         assert CLIENT_IDS["exit_order_service"] == 60
-        assert CLIENT_IDS["ib_reconcile"] == 90
         assert CLIENT_IDS["fetch_analyst_ratings"] == 99
         assert CLIENT_IDS["ib_realtime_server"] == 100
 
@@ -263,8 +277,9 @@ class TestConnectIb:
 
         result = connect_ib("ib_sync")
 
+        # ib_sync uses master client (0) for full order visibility
         mock_ib.connect.assert_called_once_with(
-            "127.0.0.1", 4001, clientId=1, timeout=10
+            "127.0.0.1", 4001, clientId=0, timeout=10
         )
         assert result is mock_ib
 
@@ -277,7 +292,7 @@ class TestConnectIb:
         result = connect_ib("ib_sync", host="192.168.1.1", port=7497)
 
         mock_ib.connect.assert_called_once_with(
-            "192.168.1.1", 7497, clientId=1, timeout=10
+            "192.168.1.1", 7497, clientId=0, timeout=10
         )
 
     @patch("utils.ib_connection.IB")
@@ -301,7 +316,7 @@ class TestConnectIb:
         result = connect_ib("ib_sync", timeout=30)
 
         mock_ib.connect.assert_called_once_with(
-            "127.0.0.1", 4001, clientId=1, timeout=30
+            "127.0.0.1", 4001, clientId=0, timeout=30
         )
 
     @patch("utils.ib_connection.IB")

@@ -14,10 +14,29 @@ Developer reference for the Interactive Brokers TWS API as used via the `ib_insy
 
 ### IB.connect()
 ```python
-ib.connect(host='127.0.0.1', port=4001, clientId=1, timeout=4.0)
+ib.connect(host='127.0.0.1', port=4001, clientId=0, timeout=4.0)
 ```
-- `clientId` must be unique per connection. Duplicate disconnects the older session.
-- `clientId=0` is the default master client.
+
+### Client ID Strategy
+
+**Default to `clientId=0` (master client)** unless you need concurrent connections.
+
+| clientId | Privileges | Use When |
+|----------|-----------|----------|
+| **0** (master) | Full control — can cancel/modify ANY order | Default for most operations |
+| 1-999 | Can only manage own orders | Need concurrent connections |
+
+**Why master client by default:**
+- Can cancel orders placed via TWS or other clients
+- Can modify any order regardless of origin
+- Full visibility into account state
+
+**When to use unique clientId:**
+- Running multiple scripts simultaneously (real-time streaming + sync)
+- Long-running background services that shouldn't block other connections
+- Order placement (orders get tagged with clientId for tracking)
+
+**Critical rule:** Only ONE connection can use `clientId=0` at a time. Duplicate disconnects the older session.
 
 ### Market Data Type
 ```python

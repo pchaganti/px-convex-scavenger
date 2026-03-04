@@ -629,6 +629,27 @@ See `.pi/skills/html-report/SKILL.md` for full template documentation.
 
 ## Interactive Brokers Integration
 
+### Client ID Strategy
+
+**Default to `clientId=0` (master client)** for full order control.
+
+| clientId | Privileges | Scripts |
+|----------|-----------|---------|
+| **0** (master) | Can cancel/modify ANY order | `ib_sync`, `ib_orders`, `ib_reconcile`, `ib_order_manage` |
+| 2+ (unique) | Can only manage own orders | `ib_order`, `ib_fill_monitor`, `exit_order_service`, `ib_realtime_server` |
+
+**Why master client:**
+- Can cancel orders placed via TWS (which have `orderId=0`)
+- Full visibility into all account orders
+- Required for `ib_order_manage.py` cancel/modify operations
+
+**When to use unique clientId:**
+- Long-running services (streaming, monitoring) that shouldn't block other connections
+- Order placement (tags orders with clientId for tracking)
+- Multiple concurrent connections required
+
+**Critical:** Only ONE connection can use `clientId=0` at a time.
+
 ### Portfolio Sync (Periodic)
 
 ```bash
