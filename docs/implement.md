@@ -5,6 +5,23 @@
 - `docs/prompt.md` defines constraints and "done when"
 - Execute milestones IN ORDER, do not skip
 
+## API Client Architecture
+
+All IB and UW access goes through centralized clients in `scripts/clients/`:
+
+| Client | File | Usage |
+|--------|------|-------|
+| `IBClient` | `scripts/clients/ib_client.py` | `from clients.ib_client import IBClient` |
+| `UWClient` | `scripts/clients/uw_client.py` | `from clients.uw_client import UWClient` |
+
+**IBClient** wraps `ib_insync.IB` with connection retries, context manager support, and methods for positions, orders, quotes, options chains, fills, flex queries, and historical data. Exception hierarchy: `IBError` → `IBConnectionError`, `IBOrderError`, `IBTimeoutError`, `IBContractError`. Raw access via `client.ib` property.
+
+**UWClient** wraps all Unusual Whales REST endpoints with session pooling, automatic retry/backoff, and context manager support. Exception hierarchy: `UWAPIError` → `UWAuthError`, `UWRateLimitError`, `UWNotFoundError`, `UWValidationError`, `UWServerError`. 50+ methods covering dark pool, options flow, stock info, GEX, volatility, ratings, seasonality, and more.
+
+**Legacy utils** (`scripts/utils/ib_connection.py`, `scripts/utils/uw_api.py`) are preserved but all scripts have been migrated to the new clients.
+
+---
+
 ## Operating Rules
 
 ### 1. Validate Before Assuming

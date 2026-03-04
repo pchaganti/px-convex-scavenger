@@ -82,7 +82,7 @@ python3 scripts/fetch_flow.py [TICKER]
 ```bash
 python3 scripts/fetch_options.py [TICKER]
 ```
-**Data Sources**: IB (spot price) → UW (chain + flow) → Yahoo (fallback)
+**Data Sources**: IBClient (spot price) → UWClient (chain + flow) → Yahoo (fallback)
 
 **Acceptance Criteria**:
 - Call/put premium ratio calculated

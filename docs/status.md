@@ -1,9 +1,11 @@
 # Status & Decision Log
 
 ## Last Updated
-2026-03-04T10:30:00-08:00
+2026-03-04T13:15:00-08:00
 
 ## Recent Commits
+- 2026-03-04 13:15:00 -0800 — Added Synthetic Long/Short detection to IB sync and free trade analyzer
+- 2026-03-04 13:05:00 -0800 — Startup protocol: IB sync runs before free trade analysis
 - 2026-03-04 10:30:00 -0800 — Startup protocol: Batch all notifications into single multi-line message
 - 2026-03-04 10:15:00 -0800 — Startup protocol: Show all processes with numbered progress (TDD)
 - 2026-03-04 07:30:00 -0800 — Created exit_order_service.py and launchd integration
@@ -165,12 +167,12 @@ Then when async tasks complete:
 - **Deferred**: Progress messages collected during async execution
 - **Final**: Single batched notification with all results when complete
 
-**Processes tracked:**
-1. **docs** — Load project docs + always-on skills
-2. **ib** — IB reconciliation (async)
-3. **daemon** — Monitor daemon status check
-4. **free_trade** — Free trade opportunity scan (async)
-5. **x_{account}** — X account scans if >12 hours stale (async)
+**Processes tracked (in order):**
+1. **docs** — Load project docs + always-on skills (sync)
+2. **ib** — IB reconciliation (async, runs first)
+3. **free_trade** — Free trade scan (async, waits for IB to complete)
+4. **daemon** — Monitor daemon status check (sync)
+5. **x_{account}** — X account scans (async, parallel)
 
 **Status indicators:**
 - `✓` success — Process completed normally
@@ -197,6 +199,8 @@ Then when async tasks complete:
 ### Key Scripts
 | Script | Purpose |
 |--------|---------|
+| `clients/ib_client.py` | **IBClient** — Primary IB API client |
+| `clients/uw_client.py` | **UWClient** — Primary UW API client |
 | `ib_reconcile.py` | Startup reconciliation (async) |
 | `ib_sync.py` | Manual portfolio sync |
 | `ib_order.py` | Place single-leg option orders |

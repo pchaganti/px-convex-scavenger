@@ -29,6 +29,8 @@ GATE 3 — RISK MGMT  : Fractional Kelly sizing. Hard cap: 2.5% of bankroll per 
 
 **Never skip to Yahoo or web without trying IB → UW first.**
 
+**API Clients:** All scripts use `scripts/clients/` — `IBClient` for IB, `UWClient` for UW. Legacy `scripts/utils/ib_connection.py` and `scripts/utils/uw_api.py` preserved for backward compat but new code should use the clients.
+
 ---
 
 ## ⚠️ Market Hours Rule — Always Fetch Fresh Data
@@ -82,6 +84,8 @@ TZ=America/New_York date +"%A %H:%M"   # Check if market open (9:30–16:00 ET, 
 
 | Script | Purpose |
 |--------|---------|
+| `scripts/clients/ib_client.py` | **IBClient** — Primary IB API client (connection, orders, quotes, options, fills, flex) |
+| `scripts/clients/uw_client.py` | **UWClient** — Primary UW API client (dark pool, flow, chain, ratings, seasonality, 50+ endpoints) |
 | `scripts/fetch_ticker.py` | Ticker validation |
 | `scripts/fetch_flow.py` | Dark pool + options flow |
 | `scripts/fetch_options.py` | Options chain + institutional flow |
