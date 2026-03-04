@@ -153,49 +153,98 @@ END ALWAYS-ON SKILLS
     proc.unref();
   };
 
-  // Run Exit Order Service asynchronously (non-blocking)
-  const runExitOrderService = (cwd: string, ui: any) => {
-    const scriptPath = path.join(cwd, "scripts/exit_order_service.py");
+  // Check and start Monitor Daemon service
+  const checkMonitorDaemon = (cwd: string, ui: any): { running: boolean; error: string | null } => {
+    const serviceName = "com.convex-scavenger.monitor-daemon";
+    const plistPath = path.join(process.env.HOME || "", "Library/LaunchAgents", `${serviceName}.plist`);
     
-    if (!fs.existsSync(scriptPath)) {
+    // Check if plist is installed
+    if (!fs.existsSync(plistPath)) {
+      return { running: false, error: "Service not installed. Run: ./scripts/setup_monitor_daemon.sh install" };
+    }
+    
+    try {
+      // Check if service is running via launchctl
+      const result = execSync(`launchctl list | grep ${serviceName}`, { 
+        encoding: "utf-8",
+        timeout: 5000 
+      }).trim();
+      
+      // launchctl list output: PID Status Label
+      // If PID is "-" or "0", service is loaded but idle (normal for interval-based)
+      // If we get a result, the service is loaded
+      if (result.includes(serviceName)) {
+        return { running: true, error: null };
+      }
+      
+      return { running: false, error: null };
+    } catch (e: any) {
+      // grep returns exit code 1 if no match - service not loaded
+      if (e.status === 1) {
+        return { running: false, error: null };
+      }
+      return { running: false, error: e.message };
+    }
+  };
+  
+  const startMonitorDaemon = (cwd: string, ui: any): { success: boolean; error: string | null } => {
+    const plistPath = path.join(process.env.HOME || "", "Library/LaunchAgents", "com.convex-scavenger.monitor-daemon.plist");
+    const configPath = path.join(cwd, "config/com.convex-scavenger.monitor-daemon.plist");
+    
+    // If plist not in LaunchAgents, copy it
+    if (!fs.existsSync(plistPath)) {
+      if (!fs.existsSync(configPath)) {
+        return { success: false, error: "Plist config not found. Daemon not set up." };
+      }
+      
+      try {
+        // Copy plist to LaunchAgents
+        execSync(`cp "${configPath}" "${plistPath}"`, { timeout: 5000 });
+      } catch (e: any) {
+        return { success: false, error: `Failed to copy plist: ${e.message}` };
+      }
+    }
+    
+    try {
+      // Load the service
+      execSync(`launchctl load "${plistPath}"`, { 
+        encoding: "utf-8",
+        timeout: 5000 
+      });
+      return { success: true, error: null };
+    } catch (e: any) {
+      // Already loaded is not an error
+      if (e.message?.includes("already loaded")) {
+        return { success: true, error: null };
+      }
+      return { success: false, error: e.message };
+    }
+  };
+  
+  const ensureMonitorDaemonRunning = (cwd: string, ui: any) => {
+    const status = checkMonitorDaemon(cwd, ui);
+    
+    if (status.running) {
+      ui.notify("✓ Monitor daemon running", "info");
       return;
     }
     
-    // Spawn Python process in background
-    const proc = spawn("python3", [scriptPath], {
-      cwd,
-      detached: true,
-      stdio: ["ignore", "pipe", "pipe"],
-    });
+    if (status.error?.includes("not installed")) {
+      ui.notify(`⚠️ Monitor daemon: ${status.error}`, "warning");
+      return;
+    }
     
-    let output = "";
-    let errorOutput = "";
+    // Try to start it
+    ui.notify("Starting monitor daemon...", "info");
+    const startResult = startMonitorDaemon(cwd, ui);
     
-    proc.stdout?.on("data", (data) => {
-      output += data.toString();
-    });
-    
-    proc.stderr?.on("data", (data) => {
-      errorOutput += data.toString();
-    });
-    
-    proc.on("close", (code) => {
-      if (code === 0) {
-        // Check if any orders were placed
-        if (output.includes("Target order placed")) {
-          ui.notify("📈 Exit order placed!", "info");
-        } else if (output.includes("pending exit order")) {
-          // Pending orders exist but couldn't place yet - silent
-        }
-      } else if (errorOutput.includes("Failed to connect") || errorOutput.includes("Connection refused")) {
-        // IB not connected - silent fail
-      } else if (errorOutput && !errorOutput.includes("Market closed")) {
-        ui.notify(`Exit order service: ${errorOutput.slice(0, 80)}`, "warning");
-      }
-    });
-    
-    // Unref so it doesn't keep the process alive
-    proc.unref();
+    if (startResult.success) {
+      ui.notify("✓ Monitor daemon started", "info");
+    } else {
+      ui.notify(`❌ Monitor daemon failed: ${startResult.error}`, "error");
+      // Flag for immediate debugging
+      ui.notify("DEBUG NEEDED: Check ./scripts/setup_monitor_daemon.sh status", "error");
+    }
   };
 
   // Check X account scan status
@@ -258,8 +307,8 @@ END ALWAYS-ON SKILLS
     // Run IB reconciliation asynchronously (non-blocking)
     runIBReconciliation(ctx.cwd, ctx.ui);
     
-    // Run Exit Order Service asynchronously (non-blocking)
-    // This checks if any pending target orders can now be placed
-    runExitOrderService(ctx.cwd, ctx.ui);
+    // Check and ensure Monitor Daemon is running
+    // This handles fill monitoring and exit order placement
+    ensureMonitorDaemonRunning(ctx.cwd, ctx.ui);
   });
 }
