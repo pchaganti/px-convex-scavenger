@@ -143,6 +143,25 @@
 
 ## Recent Evaluations
 
+### NFLX (Netflix) - 2026-03-05 ⛔ NO_TRADE
+- **Decision**: NO_TRADE
+- **Failing Gate**: EDGE (Milestone 4)
+- **📊 Data as of**: 2026-03-05 12:32 PM PT (LIVE — all milestones fetched fresh)
+- **Reason**: Accumulation cycle BROKE TODAY. Feb 27–Mar 4 showed 4-day sustained accumulation (84–93% buy). But **Mar 5 (TODAY): NEUTRAL (54.4%, strength 0.0)** — broke the streak.
+  - Feb 26: DISTRIBUTION (37.5%)
+  - Feb 27: ACCUMULATION (92.5%, 85.1 strength)
+  - Mar 2: ACCUMULATION (92.7%, 85.4 strength)
+  - Mar 3: ACCUMULATION (85.0%, 69.9 strength)
+  - Mar 4: ACCUMULATION (84.4%, 68.9 strength)
+  - **Mar 5 (TODAY): NEUTRAL (54.4%, 0.0 strength)** ← streak broken
+  - Sustained consecutive days = **0** (need 3+)
+  - Recent strength = 0.0 (need >70 for alternative criterion)
+- **What passed**: Aggregate strength 65.4 (>50), $39M in OI changes (1 MASSIVE signal), chain data available, 82.7% aggregate buy ratio
+- **What failed**: Today's neutral print resets sustained days to 0. Same pattern as AAPL — institutions accumulated Feb 27–Mar 4 then stopped.
+- **GARCH context**: HV20 (57.9%) − LEAP IV (43.3%) = +14.5 pts → LEAP vega is cheap. But without sustained DP flow, no edge to trigger the trade.
+- **Ticker Verified**: YES — Netflix, Communication Services, $98.45
+- **Action**: Add to WATCH. Re-evaluate if sustained accumulation resumes (3+ consecutive days). Also monitor for standalone LEAP IV play if HV20−IV gap widens further.
+
 ### AAPL (Apple Inc.) - 2026-03-05 ⛔ NO_TRADE
 - **Decision**: NO_TRADE
 - **Failing Gate**: EDGE (Milestone 4)
