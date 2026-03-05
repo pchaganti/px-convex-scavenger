@@ -119,8 +119,8 @@ agent-browser pdf output.pdf          # Save as PDF
 ### Trading-Specific Examples
 
 ```bash
-# Fetch a stock page (when Exa doesn't have the specific data)
-agent-browser open "https://finance.yahoo.com/quote/AAPL"
+# Fetch a stock page (LAST RESORT — only if IB, UW, and Exa all fail)
+agent-browser open "https://finviz.com/quote.ashx?t=AAPL"
 agent-browser wait --load networkidle
 agent-browser snapshot -i -c
 

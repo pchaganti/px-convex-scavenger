@@ -324,7 +324,7 @@ await client.sessions.stop(str(session.id))
 ```python
 # The agent can take screenshots as part of tasks
 result = await client.run(
-    "Go to finance.yahoo.com/quote/AAPL and take a screenshot of the current price chart",
+    "Go to tradingview.com/symbols/AAPL and take a screenshot of the current price chart",
     keep_alive=True
 )
 

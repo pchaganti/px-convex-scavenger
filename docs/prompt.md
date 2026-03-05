@@ -65,6 +65,7 @@ An evaluation is complete when:
 
 ## Data Sources (Priority Order)
 1. **Interactive Brokers** — Real-time quotes, positions, executions
-2. **Unusual Whales** — Dark pool flow, options activity, alerts
-3. **Yahoo Finance** — Fallback for quotes and analyst data
-4. **Web Scrape** — Last resort only
+2. **Unusual Whales** — Dark pool flow, options activity, alerts, analyst ratings
+3. **Exa (web search)** — Company research, code/docs lookup
+4. **agent-browser** — Interactive pages, JS-rendered content
+5. **Yahoo Finance** — **ABSOLUTE LAST RESORT** — only if ALL above sources fail (rate limited, unreliable)

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 Fetch options chain and flow data.
-Priority: IB (chain) → UW (chain + flow) → Yahoo (chain only)
+Priority: IB (chain) → UW (chain + flow) → Yahoo (ABSOLUTE LAST RESORT)
 
 Usage:
     python3 scripts/fetch_options.py RMBS
@@ -359,7 +359,7 @@ def fetch_uw_flow(ticker: str, days: int = 7, _client: UWClient = None) -> Optio
 
 
 def fetch_yahoo_options(ticker: str) -> Optional[Dict]:
-    """Fallback: Fetch basic options info from Yahoo Finance."""
+    """ABSOLUTE LAST RESORT: Fetch basic options info from Yahoo Finance."""
     try:
         import yfinance as yf
         stock = yf.Ticker(ticker)
@@ -451,7 +451,7 @@ def fetch_options(ticker: str, dte_min: int = 20, dte_max: int = 45,
     if source == "ib" and ib_info and not chain_data:
         chain_data = {"source": "ib", "available": True, **ib_info}
     
-    # 3. Fallback to Yahoo for chain
+    # 3. ABSOLUTE LAST RESORT: Yahoo for chain (only if IB AND UW both failed)
     if source in (None, "yahoo") and not chain_data:
         result["sources_tried"].append("yahoo")
         yahoo_data = fetch_yahoo_options(ticker)

@@ -675,7 +675,8 @@ ib.on("error", (error, data) => {
   } else {
     console.error(`\x1b[31mIB error: ${msg}${symbol ? ` (${symbol})` : tickerId != null ? ` (tickerId:${tickerId})` : ""}\x1b[0m`);
   }
-  broadcastStatus();
+  // Only broadcast status on actual connection-affecting errors, not benign IB messages.
+  // The connected/disconnected handlers already broadcast on real state changes.
 });
 
 ib.on("tickPrice", (tickerId, tickType, price) => {

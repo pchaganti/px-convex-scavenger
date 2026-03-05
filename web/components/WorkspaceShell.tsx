@@ -90,10 +90,27 @@ export default function WorkspaceShell({ section }: WorkspaceShellProps) {
     [portfolioContracts, orderContracts],
   );
 
-  const { prices: rawPrices, connected: wsConnected, ibConnected } = usePrices({
+  const { prices: rawPrices, connected: wsConnected, ibConnected: rawIbConnected } = usePrices({
     symbols: allSymbols,
     contracts: allContracts,
   });
+
+  // Debounce ibConnected: disconnections must persist >2s before surfacing to UI.
+  // IB farm connectivity checks fire brief disconnected→connected sequences that
+  // would otherwise flash the banner/toast every few seconds.
+  const [ibConnected, setIbConnected] = useState(rawIbConnected);
+  const ibDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (ibDebounceRef.current) clearTimeout(ibDebounceRef.current);
+    if (rawIbConnected) {
+      // Reconnection: propagate immediately (user wants to know it's back)
+      setIbConnected(true);
+    } else {
+      // Disconnection: delay 2s to filter out brief farm-check flickers
+      ibDebounceRef.current = setTimeout(() => setIbConnected(false), 2000);
+    }
+    return () => { if (ibDebounceRef.current) clearTimeout(ibDebounceRef.current); };
+  }, [rawIbConnected]);
 
   // Backfill missing previous-close from Yahoo Finance / UW for day-change calc
   const prices = usePreviousClose(rawPrices);

@@ -7,12 +7,12 @@ When fetching ANY market data (quotes, options, fundamentals, analyst ratings, e
 | Priority | Source | When to Use |
 |----------|--------|-------------|
 | **1st** | Interactive Brokers | Always try first if TWS/Gateway available |
-| **2nd** | Unusual Whales | Flow data, dark pools, options activity |
-| **3rd** | Yahoo Finance | Only if IB and UW unavailable/don't have the data |
-| **4th** | Exa (web search) | Web search, company research, code/docs lookup |
-| **5th** | agent-browser | Only for interactive pages, screenshots, JS-rendered content |
+| **2nd** | Unusual Whales | Flow data, dark pools, options activity, analyst ratings |
+| **3rd** | Exa (web search) | Web search, company research, code/docs lookup |
+| **4th** | agent-browser | Only for interactive pages, screenshots, JS-rendered content |
+| **5th** | Yahoo Finance | **ABSOLUTE LAST RESORT** — only if ALL above sources fail/unavailable |
 
-**Never skip to Yahoo Finance or web search without trying IB/UW first.**
+**Yahoo Finance is the source of LAST RESORT. Never use it if IB, UW, or Exa can provide the data.**
 **For web search/fetch: always use Exa first, agent-browser only as fallback.**
 
 ---
@@ -53,7 +53,7 @@ When market is closed, free trade analysis explicitly shows it's using closing p
 **Implementation:**
 - Scripts should import `from utils.market_hours import is_market_open, get_market_status`
 - Include timestamp of data fetch in all analysis output
-- If IB connection unavailable during market hours, fall back to UW/Yahoo but note the degraded state
+- If IB connection unavailable during market hours, fall back to UW/Exa. Yahoo Finance is absolute last resort.
 
 ---
 
@@ -288,7 +288,7 @@ Fetch options chain activity and institutional flow alerts.
 **Data Sources (following standard priority):**
 1. Interactive Brokers - spot price, expirations, strikes
 2. Unusual Whales - chain volume/premium, flow alerts, sweeps (primary)
-3. Yahoo Finance - fallback for basic chain data
+3. Yahoo Finance - **LAST RESORT ONLY** if IB and UW both fail
 
 ```bash
 # Standard analysis
@@ -353,10 +353,8 @@ Fetch analyst ratings, recent rating changes, and price targets.
 
 **Data Sources (following standard priority):**
 1. Interactive Brokers (`RESC` fundamental data) - requires Reuters subscription
-2. Yahoo Finance - fallback if IB unavailable (rate limited)
-3. Web scrape - last resort
-
-*Note: Unusual Whales HAS analyst ratings via `/api/screener/analysts` endpoint. See `docs/unusual_whales_api.md` for details.*
+2. Unusual Whales (`/api/screener/analysts`) - aggregates per-firm consensus, targets, history
+3. Yahoo Finance - **ABSOLUTE LAST RESORT** — only if IB AND UW both fail (rate limited, unreliable)
 
 ```bash
 # Scan specific tickers (auto-detects IB, falls back to Yahoo)
@@ -378,7 +376,7 @@ python3 scripts/fetch_analyst_ratings.py --portfolio --changes-only
 python3 scripts/fetch_analyst_ratings.py --watchlist --update-watchlist
 
 # Force specific data source
-python3 scripts/fetch_analyst_ratings.py AAPL --source yahoo
+python3 scripts/fetch_analyst_ratings.py AAPL --source yahoo  # LAST RESORT ONLY
 python3 scripts/fetch_analyst_ratings.py AAPL --source ib
 
 # Custom IB port
@@ -799,7 +797,7 @@ See `docs/strategy-garch-convergence.md` for full report generation spec.
 |--------|---------|
 | `scripts/fetch_ticker.py` | Validate ticker via dark pool activity |
 | `scripts/fetch_flow.py` | Fetch dark pool + options flow data |
-| `scripts/fetch_options.py` | Options chain + institutional flow analysis (IB/UW/Yahoo) |
+| `scripts/fetch_options.py` | Options chain + institutional flow analysis (IB → UW → Yahoo last resort) |
 | `scripts/fetch_oi_changes.py` | **⭐ Fetch OI changes to find hidden institutional positioning (REQUIRED)** |
 | `scripts/verify_options_oi.py` | Verify specific options flow claims via Open Interest |
 | `scripts/fetch_analyst_ratings.py` | Fetch analyst ratings, changes, and price targets |
@@ -814,7 +812,7 @@ See `docs/strategy-garch-convergence.md` for full report generation spec.
 | `scripts/ib_realtime_server.js` | Node.js WebSocket server for real-time IB price streaming |
 | `scripts/test_ib_realtime.py` | Tests for IB real-time connectivity |
 | `scripts/leap_iv_scanner.py` | LEAP IV mispricing scanner (IB connection required) |
-| `scripts/leap_scanner_uw.py` | LEAP IV scanner using UW + Yahoo Finance (no IB needed) |
+| `scripts/leap_scanner_uw.py` | LEAP IV scanner using UW (Yahoo as last resort for HV data) |
 | `scripts/utils/presets.py` | **Preset loader** — `load_preset()`, `list_presets()` for 150 ticker presets |
 | `scripts/fetch_x_watchlist.py` | Fetch X account tweets and extract ticker sentiment |
 | `scripts/monitor_daemon/run.py` | **Extensible monitoring daemon** (replaces exit_order_service) |
@@ -1332,35 +1330,35 @@ See `docs/strategies.md` for full methodology.
 
 ## Data Source Priority (Detailed)
 
-**ALWAYS use sources in this order. Never skip ahead.**
+**ALWAYS use sources in this order. Never skip ahead. Yahoo Finance is ABSOLUTE LAST RESORT.**
 
 | Priority | Source | Use Case | Notes |
 |----------|--------|----------|-------|
 | **1** | Interactive Brokers | Real-time quotes, options chains, analyst ratings, fundamentals | Requires TWS/Gateway running |
-| **2** | Unusual Whales | Dark pool flow, options activity, institutional flow | API key in UW_TOKEN env var |
-| **3** | Yahoo Finance | Quotes, analyst ratings when IB unavailable | Rate limited, can be delayed |
-| **4** | Exa (web search) | Web search, company research, code/docs lookup | API key in EXA_API_KEY env var |
-| **5** | agent-browser | Only for interactive pages, screenshots, JS-rendered content | Fallback when Exa insufficient |
+| **2** | Unusual Whales | Dark pool flow, options activity, institutional flow, analyst ratings | API key in UW_TOKEN env var |
+| **3** | Exa (web search) | Web search, company research, code/docs lookup | API key in EXA_API_KEY env var |
+| **4** | agent-browser | Only for interactive pages, screenshots, JS-rendered content | Fallback when Exa insufficient |
+| **5 ⚠️** | Yahoo Finance | **ABSOLUTE LAST RESORT** — only if ALL above sources fail | Rate limited, unreliable, delayed |
 
 **What each source provides:**
 
-| Data Type | IB | UW | Yahoo | Web |
-|-----------|----|----|-------|-----|
-| Real-time quotes | ✅ | ❌ | ⚠️ delayed | ❌ |
-| Options chains | ✅ | ✅ | ✅ | ❌ |
-| Options premium/volume | ⚠️ limited | ✅ | ⚠️ limited | ❌ |
-| Dark pool flow | ❌ | ✅ | ❌ | ❌ |
-| Options flow/sweeps | ❌ | ✅ | ❌ | ❌ |
-| Bid/Ask side analysis | ❌ | ✅ | ❌ | ❌ |
-| Analyst ratings | ✅ (subscription) | ✅ | ✅ | ✅ |
-| Fundamentals | ✅ (subscription) | ❌ | ✅ | ✅ |
-| News/Events | ❌ | ✅ | ❌ | ✅ |
-| Seasonality | ❌ | ✅ | ❌ | ✅ EquityClock |
-| Greek exposure (GEX) | ❌ | ✅ | ❌ | ❌ |
-| Institutional ownership | ❌ | ✅ | ✅ | ✅ |
-| Short interest | ❌ | ✅ | ✅ | ❌ |
-| Congress trades | ❌ | ✅ | ❌ | ❌ |
-| Insider trades | ❌ | ✅ | ❌ | ✅ |
+| Data Type | IB (1st) | UW (2nd) | Exa (3rd) | Browser (4th) | Yahoo (5th ⚠️) |
+|-----------|----------|----------|-----------|---------------|----------------|
+| Real-time quotes | ✅ | ❌ | ❌ | ❌ | ⚠️ delayed |
+| Options chains | ✅ | ✅ | ❌ | ❌ | ⚠️ last resort |
+| Options premium/volume | ⚠️ limited | ✅ | ❌ | ❌ | ⚠️ limited |
+| Dark pool flow | ❌ | ✅ | ❌ | ❌ | ❌ |
+| Options flow/sweeps | ❌ | ✅ | ❌ | ❌ | ❌ |
+| Bid/Ask side analysis | ❌ | ✅ | ❌ | ❌ | ❌ |
+| Analyst ratings | ✅ (subscription) | ✅ | ✅ | ✅ | ⚠️ last resort |
+| Fundamentals | ✅ (subscription) | ❌ | ✅ | ✅ | ⚠️ last resort |
+| News/Events | ❌ | ✅ | ✅ | ✅ | ❌ |
+| Seasonality | ❌ | ✅ | ✅ EquityClock | ✅ | ❌ |
+| Greek exposure (GEX) | ❌ | ✅ | ❌ | ❌ | ❌ |
+| Institutional ownership | ❌ | ✅ | ✅ | ✅ | ⚠️ last resort |
+| Short interest | ❌ | ✅ | ❌ | ❌ | ⚠️ last resort |
+| Congress trades | ❌ | ✅ | ❌ | ❌ | ❌ |
+| Insider trades | ❌ | ✅ | ✅ | ✅ | ❌ |
 
 **IB Fundamental Data** (requires Reuters Fundamentals subscription):
 - `ReportsFinSummary` - Financial summary

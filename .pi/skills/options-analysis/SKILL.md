@@ -25,9 +25,11 @@ When fetching live options pricing, use sources in this order:
 |----------|--------|----------------|
 | **1** | Interactive Brokers | `python3 scripts/ib_sync.py` (requires TWS/Gateway) |
 | **2** | Unusual Whales | See API reference below |
-| **3** | Yahoo Finance | `agent-browser` to scrape options chain (fallback, rate limited) |
+| **3** | Exa (web search) | Company research, fallback for data not in IB/UW |
+| **4** | agent-browser | Interactive pages, JS-rendered content |
+| **5 ⚠️** | Yahoo Finance | **ABSOLUTE LAST RESORT** — only if ALL above sources fail |
 
-**Note:** IB provides the most accurate real-time bid/ask spreads. Yahoo Finance should only be used as a last resort due to rate limiting and potential data delays.
+**⚠️ Yahoo Finance is the ABSOLUTE LAST RESORT.** It is rate limited, unreliable, and delayed. Never use it if IB, UW, Exa, or agent-browser can provide the data.
 
 ## Unusual Whales API for Options
 

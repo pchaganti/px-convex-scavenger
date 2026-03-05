@@ -146,6 +146,14 @@
 - **Ticker Verified**: YES
 - **Note**: Existing AMD LEAP position already in portfolio (see trade #5). Current flow suggests edge has faded — monitor for position review.
 
+### APO (Apollo Global Management) - 2026-03-05
+- **Decision**: NO_TRADE
+- **Failing Gate**: EDGE
+- **Reason**: Dark pool aggregate strength 10.3 (need >50). 3 of 5 days NEUTRAL. 0 consecutive days sustained direction. Options flow is BEARISH (P/C 2.05x, $8.2M put premium, sweep activity on Jun $105 puts), but dark pool does NOT confirm distribution — flow is neutral, not selling. Without DP confirmation, put buying could be hedging, not directional. OI changes all MODERATE (<$1M per position, $3.08M total). No massive institutional positioning in either direction.
+- **Seasonality**: UNFAVORABLE (March 29% win rate, -4.2% avg return)
+- **Analyst Ratings**: Unavailable (rate limited)
+- **Ticker Verified**: YES — Apollo Global Management, Financial Services, $63.5B market cap
+
 ### RMBS - 2026-03-03
 - **Decision**: NO_TRADE
 - **Failing Gate**: EDGE

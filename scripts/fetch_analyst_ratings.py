@@ -4,9 +4,9 @@ Fetch analyst ratings and rating changes for tickers.
 
 Data Source Priority:
   1. Interactive Brokers (reqFundamentalData 'RESC') - Most reliable, requires subscription
-  2. Unusual Whales (GET /api/screener/analysts) - Has ratings data (see docs/unusual_whales_api.md)
-  3. Yahoo Finance - Fallback (rate limited)
-  
+  2. Unusual Whales (GET /api/screener/analysts) - Aggregated per-firm consensus, targets, history
+  3. Yahoo Finance - ⚠️ ABSOLUTE LAST RESORT (rate limited, unreliable, delayed)
+
 API Reference: docs/unusual_whales_api.md for UW endpoint details
 Full Spec: docs/unusual_whales_api_spec.yaml
 
@@ -16,7 +16,8 @@ Usage:
     python3 scripts/fetch_analyst_ratings.py --portfolio
     python3 scripts/fetch_analyst_ratings.py --all
     python3 scripts/fetch_analyst_ratings.py --changes-only  # Only show recent changes
-    python3 scripts/fetch_analyst_ratings.py --source yahoo  # Force Yahoo Finance
+    python3 scripts/fetch_analyst_ratings.py --source uw     # Force Unusual Whales
+    python3 scripts/fetch_analyst_ratings.py --source yahoo  # LAST RESORT ONLY
 """
 
 import json
@@ -29,7 +30,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 import argparse
 
-# Rate limiting for Yahoo Finance (last resort)
+# Rate limiting for Yahoo Finance (ABSOLUTE LAST RESORT)
 REQUEST_DELAY = 1.5  # seconds between requests
 MAX_RETRIES = 2
 RETRY_DELAY = 3  # seconds between retries
@@ -41,6 +42,7 @@ from clients.ib_client import (
     DEFAULT_HOST as IB_HOST,
     DEFAULT_GATEWAY_PORT as IB_PORT,
 )
+from clients.uw_client import UWClient
 
 IB_CLIENT_ID = CLIENT_IDS["fetch_analyst_ratings"]
 
@@ -252,12 +254,157 @@ def fetch_from_ib(client: IBClient, ticker: str) -> Optional[dict]:
 
 
 # =============================================================================
-# Yahoo Finance Data Source (Fallback)
+# Unusual Whales Data Source (Priority 2)
+# =============================================================================
+
+def fetch_from_uw(ticker: str) -> Optional[dict]:
+    """
+    Fetch analyst ratings from Unusual Whales screener endpoint.
+    Aggregates individual analyst actions into a consensus view.
+    
+    Endpoint: GET /api/screener/analysts?ticker={TICKER}&limit=100
+    Returns individual analyst actions (maintained, upgraded, etc.)
+    which we aggregate into buy/hold/sell counts.
+    """
+    try:
+        with UWClient() as uw:
+            data = uw._get("screener/analysts", params={"ticker": ticker.upper(), "limit": 100})
+            entries = data.get("data", [])
+    except Exception as e:
+        return None
+
+    if not entries:
+        return None
+
+    # Filter to this ticker only (safety check)
+    entries = [e for e in entries if e.get("ticker", "").upper() == ticker.upper()]
+    if not entries:
+        return None
+
+    result = {
+        "ticker": ticker.upper(),
+        "fetched_at": datetime.now().isoformat(),
+        "source": "uw",
+        "ratings": None,
+        "recommendation": None,
+        "target_price": None,
+        "recent_changes": [],
+        "upgrade_downgrade_history": [],
+        "error": None,
+        "from_cache": False,
+    }
+
+    # --- Aggregate most recent rating per firm (deduplicate) ---
+    latest_by_firm = {}
+    for e in entries:
+        firm = e.get("firm", "Unknown")
+        ts = e.get("timestamp", "")
+        if firm not in latest_by_firm or ts > latest_by_firm[firm].get("timestamp", ""):
+            latest_by_firm[firm] = e
+
+    # --- Count buy / hold / sell from latest per-firm recommendation ---
+    buy_count = 0
+    hold_count = 0
+    sell_count = 0
+    targets = []
+
+    for firm, e in latest_by_firm.items():
+        rec = (e.get("recommendation") or "").lower()
+        if rec in ("buy", "strong buy", "overweight", "outperform", "positive"):
+            buy_count += 1
+        elif rec in ("hold", "neutral", "equal-weight", "market perform", "peer perform", "sector perform", "in-line"):
+            hold_count += 1
+        elif rec in ("sell", "strong sell", "underweight", "underperform", "negative", "reduce"):
+            sell_count += 1
+        else:
+            # Unknown recommendation — try to infer
+            if "buy" in rec:
+                buy_count += 1
+            elif "sell" in rec or "under" in rec:
+                sell_count += 1
+            elif "hold" in rec or "neutral" in rec or "perform" in rec or "weight" in rec:
+                hold_count += 1
+
+        # Collect target prices
+        try:
+            t = float(e.get("target", 0))
+            if t > 0:
+                targets.append(t)
+        except (ValueError, TypeError):
+            pass
+
+    total = buy_count + hold_count + sell_count
+
+    if total > 0:
+        result["ratings"] = {
+            "strong_buy": 0,
+            "buy": buy_count,
+            "hold": hold_count,
+            "sell": sell_count,
+            "strong_sell": 0,
+            "total": total,
+            "buy_pct": round(buy_count / total * 100, 1),
+            "sell_pct": round(sell_count / total * 100, 1),
+        }
+
+        # Derive recommendation string
+        buy_pct = result["ratings"]["buy_pct"]
+        if buy_pct >= 70:
+            result["recommendation"] = "buy"
+        elif buy_pct >= 50:
+            result["recommendation"] = "hold"  # leaning buy
+        else:
+            result["recommendation"] = "hold"
+
+    # --- Target prices ---
+    if targets:
+        # Try to get current price from entries or estimate
+        result["target_price"] = {
+            "mean": round(sum(targets) / len(targets), 2),
+            "high": round(max(targets), 2),
+            "low": round(min(targets), 2),
+            "median": round(sorted(targets)[len(targets) // 2], 2),
+            "count": len(targets),
+        }
+
+    # --- Analyst count ---
+    result["analyst_count"] = total
+
+    # --- Build upgrade/downgrade history (most recent 10) ---
+    for e in entries[:10]:
+        action = (e.get("action") or "").lower()
+        result["upgrade_downgrade_history"].append({
+            "date": (e.get("timestamp") or "")[:10],
+            "firm": e.get("firm", "Unknown"),
+            "to_grade": e.get("recommendation", ""),
+            "from_grade": "",
+            "action": action,
+        })
+        if action in ("upgraded", "downgraded", "initiated"):
+            result["has_recent_changes"] = True
+
+    # --- Detect recent changes ---
+    recent_actions = [e.get("action", "").lower() for e in entries[:10]]
+    upgrades = sum(1 for a in recent_actions if a in ("upgraded",))
+    downgrades = sum(1 for a in recent_actions if a in ("downgraded",))
+    if upgrades > downgrades:
+        result["recent_changes"] = [{"category": "upgrades", "change": upgrades - downgrades}]
+        result["has_recent_changes"] = True
+    elif downgrades > upgrades:
+        result["recent_changes"] = [{"category": "downgrades", "change": downgrades - upgrades}]
+        result["has_recent_changes"] = True
+
+    return result
+
+
+# =============================================================================
+# Yahoo Finance Data Source (ABSOLUTE LAST RESORT)
 # =============================================================================
 
 def fetch_from_yahoo(ticker: str) -> dict:
     """
-    Fetch analyst ratings from Yahoo Finance (fallback source).
+    ABSOLUTE LAST RESORT: Fetch analyst ratings from Yahoo Finance.
+    Only called if BOTH IB and UW fail. Rate limited and unreliable.
     """
     try:
         import yfinance as yf
@@ -416,8 +563,9 @@ def fetch_from_yahoo(ticker: str) -> dict:
 def fetch_analyst_ratings(ticker: str, use_cache: bool = True, force_source: str = None, client=None) -> dict:
     """
     Fetch analyst ratings with data source priority:
-    1. Interactive Brokers (if connected)
-    2. Yahoo Finance (fallback)
+    1. Interactive Brokers (if connected, requires Reuters subscription)
+    2. Unusual Whales (/api/screener/analysts)
+    3. Yahoo Finance (ABSOLUTE LAST RESORT — only if IB AND UW both fail)
     """
     ticker = ticker.upper()
 
@@ -427,13 +575,19 @@ def fetch_analyst_ratings(ticker: str, use_cache: bool = True, force_source: str
         if cached and not cached.get("error"):
             return cached
 
-    # Try IB first (unless forced to Yahoo)
-    if force_source != "yahoo" and client is not None:
+    # Priority 1: IB (unless forced to another source)
+    if force_source not in ("yahoo", "uw") and client is not None:
         result = fetch_from_ib(client, ticker)
         if result and not result.get("error"):
             return result
 
-    # Fallback to Yahoo Finance
+    # Priority 2: Unusual Whales
+    if force_source != "yahoo":
+        result = fetch_from_uw(ticker)
+        if result and not result.get("error") and result.get("ratings"):
+            return result
+
+    # Priority 3: Yahoo Finance (ABSOLUTE LAST RESORT — only if IB AND UW both failed)
     return fetch_from_yahoo(ticker)
 
 
@@ -592,7 +746,10 @@ def format_ratings_table(results: list, changes_only: bool = False) -> str:
                     lines.append(f"\n{ticker} - Rating Distribution Changes:")
                     for change in changes:
                         direction = "↑" if change.get("change", 0) > 0 else "↓"
-                        lines.append(f"  {change['category']}: {change['previous']} → {change['current']} ({direction}{abs(change.get('change', 0))})")
+                        if "previous" in change and "current" in change:
+                            lines.append(f"  {change['category']}: {change['previous']} → {change['current']} ({direction}{abs(change.get('change', 0))})")
+                        else:
+                            lines.append(f"  {change['category']}: {direction}{abs(change.get('change', 0))}")
                 else:
                     lines.append(f"\n{ticker} - Analyst Actions:")
                     for h in changes[-5:]:
@@ -609,7 +766,7 @@ def format_ratings_table(results: list, changes_only: bool = False) -> str:
                     lines.append(f"  {h['date']} {h['firm'][:20]:<20} {arrow} {h.get('from_grade', 'N/A')} → {h.get('to_grade', 'N/A')}")
     
     lines.append("\n" + "="*95)
-    lines.append("Sources: IB = Interactive Brokers, yaho = Yahoo Finance, © = cached")
+    lines.append("Sources: IB = Interactive Brokers, uw = Unusual Whales, yaho = Yahoo Finance, © = cached")
     
     return "\n".join(lines)
 
@@ -647,7 +804,7 @@ def main():
     parser.add_argument("--update-watchlist", action="store_true", help="Update watchlist.json with ratings")
     parser.add_argument("--json", action="store_true", help="Output raw JSON")
     parser.add_argument("--no-cache", action="store_true", help="Bypass cache and fetch fresh data")
-    parser.add_argument("--source", choices=["ib", "yahoo"], help="Force specific data source")
+    parser.add_argument("--source", choices=["ib", "uw", "yahoo"], help="Force specific data source")
     parser.add_argument("--port", type=int, default=IB_PORT, help=f"IB Gateway/TWS port (default: {IB_PORT})")
     
     args = parser.parse_args()
@@ -673,13 +830,15 @@ def main():
     ib_connected = False
     ib_port = args.port
 
-    if args.source != "yahoo":
+    if args.source not in ("yahoo", "uw"):
         print(f"Attempting IB connection on port {ib_port}...", file=sys.stderr, end=" ")
         client, ib_connected = connect_ib(port=ib_port)
         if ib_connected:
             print("Connected ✓", file=sys.stderr)
         else:
-            print("Not available, using Yahoo Finance", file=sys.stderr)
+            print("Not available, falling back to UW → Yahoo", file=sys.stderr)
+    elif args.source == "uw":
+        print("Using Unusual Whales (forced)", file=sys.stderr)
     else:
         print("Using Yahoo Finance (forced)", file=sys.stderr)
 

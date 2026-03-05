@@ -225,7 +225,7 @@ python3 scripts/fetch_options.py AAPL --json
 # Force specific data source
 python3 scripts/fetch_options.py AAPL --source uw   # Unusual Whales
 python3 scripts/fetch_options.py AAPL --source ib   # Interactive Brokers
-python3 scripts/fetch_options.py AAPL --source yahoo # Yahoo Finance
+python3 scripts/fetch_options.py AAPL --source yahoo # LAST RESORT ONLY
 ```
 
 **Output includes:**

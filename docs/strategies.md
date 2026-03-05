@@ -218,11 +218,12 @@ When fetching any market data, **ALWAYS** use sources in this priority order:
 | Priority | Source | Best For | Limitations |
 |----------|--------|----------|-------------|
 | **1st** | Interactive Brokers | Real-time quotes, options chains, analyst ratings, fundamentals | Requires TWS/Gateway connection |
-| **2nd** | Unusual Whales | Dark pool flow, options activity, institutional signals | No analyst/fundamental data |
-| **3rd** | Yahoo Finance | Quotes, analyst ratings when IB unavailable | Aggressive rate limits, delayed data |
-| **4th** | Web Search/Scrape | News, events, data not in APIs | Last resort only |
+| **2nd** | Unusual Whales | Dark pool flow, options activity, institutional signals, analyst ratings | API key required |
+| **3rd** | Exa (web search) | Company research, news, data not in IB/UW | API key required |
+| **4th** | agent-browser | Interactive pages, JS-rendered content | Slow, fallback only |
+| **5th ⚠️** | Yahoo Finance | **ABSOLUTE LAST RESORT** — only if ALL above fail | Rate limited, unreliable, delayed |
 
-**Never skip to Yahoo Finance or web scraping without trying IB/UW first.**
+**Yahoo Finance is the ABSOLUTE LAST RESORT. Never use it if IB, UW, Exa, or agent-browser can provide the data.**
 
 ### Scripts
 
