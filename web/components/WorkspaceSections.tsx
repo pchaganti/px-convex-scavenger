@@ -955,7 +955,10 @@ function JournalSections() {
 type OpenOrderKey = "symbol" | "action" | "orderType" | "totalQuantity" | "limitPrice" | "lastPrice" | "status" | "tif" | "actions";
 
 /** Build the prices-map key for an order's contract (option key for options, symbol for stocks). */
-function orderPriceKey(contract: OpenOrder["contract"]): string {
+function orderPriceKey(contract: OpenOrder["contract"]): string | null {
+  // BAG (combo/spread) orders have no single price key — return null to show "---"
+  if (contract.secType === "BAG") return null;
+
   if (
     contract.secType === "OPT" &&
     contract.strike != null &&
@@ -983,7 +986,7 @@ function makeOpenOrderExtract(prices?: Record<string, PriceData>) {
       case "orderType": return item.orderType;
       case "totalQuantity": return item.totalQuantity;
       case "limitPrice": return item.limitPrice;
-      case "lastPrice": return prices?.[orderPriceKey(item.contract)]?.last ?? null;
+      case "lastPrice": { const pk = orderPriceKey(item.contract); return pk ? prices?.[pk]?.last ?? null : null; }
       case "status": return item.status;
       case "tif": return item.tif;
       case "actions": return null;
@@ -1156,7 +1159,7 @@ function OrdersSections({
                           o.limitPrice != null ? fmtPrice(o.limitPrice) : "—"
                         )}
                       </td>
-                      <OrderPriceCell price={prices?.[orderPriceKey(o.contract)]?.last ?? null} />
+                      <OrderPriceCell price={(() => { const pk = orderPriceKey(o.contract); return pk ? prices?.[pk]?.last ?? null : null; })()} />
                       <td>
                         {isPendingCancel ? (
                           <span className="status-cancelling">Cancelling...</span>
