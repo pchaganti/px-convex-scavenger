@@ -956,7 +956,6 @@ type OpenOrderKey = "symbol" | "action" | "orderType" | "totalQuantity" | "limit
 
 /** Build the prices-map key for an order's contract (option key for options, symbol for stocks). */
 function orderPriceKey(contract: OpenOrder["contract"]): string | null {
-  // BAG (combo/spread) orders have no single price key — return null to show "---"
   if (contract.secType === "BAG") return null;
 
   if (
@@ -978,7 +977,40 @@ function orderPriceKey(contract: OpenOrder["contract"]): string | null {
   return contract.symbol;
 }
 
-function makeOpenOrderExtract(prices?: Record<string, PriceData>) {
+/**
+ * Resolve the "last price" for an order.
+ * For STK/OPT: use the WS price directly.
+ * For BAG (spread): find the matching portfolio position and compute
+ * the net mid from each leg's WS bid/ask (long leg mid − short leg mid).
+ */
+function resolveOrderLastPrice(
+  order: OpenOrder,
+  prices: Record<string, PriceData> | undefined,
+  portfolio: PortfolioData | null | undefined,
+): number | null {
+  if (!prices) return null;
+  const pk = orderPriceKey(order.contract);
+  if (pk) return prices[pk]?.last ?? null;
+
+  // BAG: compute net mid from portfolio legs
+  if (order.contract.secType !== "BAG" || !portfolio) return null;
+  const pos = portfolio.positions.find((p) => p.ticker === order.contract.symbol && p.legs.length > 1);
+  if (!pos) return null;
+
+  let netMid = 0;
+  for (const leg of pos.legs) {
+    const key = legPriceKey(pos.ticker, pos.expiry, leg);
+    if (!key) return null;
+    const lp = prices[key];
+    if (!lp || lp.bid == null || lp.ask == null) return null;
+    const mid = (lp.bid + lp.ask) / 2;
+    const sign = leg.direction === "LONG" ? 1 : -1;
+    netMid += sign * mid;
+  }
+  return Math.round(netMid * 100) / 100;
+}
+
+function makeOpenOrderExtract(prices?: Record<string, PriceData>, portfolio?: PortfolioData | null) {
   return (item: OpenOrder, key: OpenOrderKey): string | number | null => {
     switch (key) {
       case "symbol": return item.symbol;
@@ -986,7 +1018,7 @@ function makeOpenOrderExtract(prices?: Record<string, PriceData>) {
       case "orderType": return item.orderType;
       case "totalQuantity": return item.totalQuantity;
       case "limitPrice": return item.limitPrice;
-      case "lastPrice": { const pk = orderPriceKey(item.contract); return pk ? prices?.[pk]?.last ?? null : null; }
+      case "lastPrice": return resolveOrderLastPrice(item, prices, portfolio);
       case "status": return item.status;
       case "tif": return item.tif;
       case "actions": return null;
@@ -1025,12 +1057,14 @@ const execOrderExtract = (item: ExecutedOrder, key: ExecOrderKey): string | numb
 function OrdersSections({
   orders,
   prices,
+  portfolio,
 }: {
   orders: OrdersData | null;
   prices?: Record<string, PriceData>;
+  portfolio?: PortfolioData | null;
 }) {
   const { pendingCancels, pendingModifies, cancelledOrders, requestCancel, requestModify } = useOrderActions();
-  const openOrderExtract = useMemo(() => makeOpenOrderExtract(prices), [prices]);
+  const openOrderExtract = useMemo(() => makeOpenOrderExtract(prices, portfolio), [prices, portfolio]);
   const openSort = useSort(orders?.open_orders ?? [], openOrderExtract);
 
   const [cancelTarget, setCancelTarget] = useState<OpenOrder | null>(null);
@@ -1159,7 +1193,7 @@ function OrdersSections({
                           o.limitPrice != null ? fmtPrice(o.limitPrice) : "—"
                         )}
                       </td>
-                      <OrderPriceCell price={(() => { const pk = orderPriceKey(o.contract); return pk ? prices?.[pk]?.last ?? null : null; })()} />
+                      <OrderPriceCell price={resolveOrderLastPrice(o, prices, portfolio)} />
                       <td>
                         {isPendingCancel ? (
                           <span className="status-cancelling">Cancelling...</span>
@@ -1429,7 +1463,7 @@ export default function WorkspaceSections({ section, portfolio, orders, prices }
     case "portfolio":
       return <PortfolioSections portfolio={portfolio ?? null} prices={prices} />;
     case "orders":
-      return <OrdersSections orders={orders ?? null} prices={prices} />;
+      return <OrdersSections orders={orders ?? null} prices={prices} portfolio={portfolio} />;
     case "scanner":
       return <ScannerSections />;
     case "discover":
