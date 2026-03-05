@@ -23,6 +23,7 @@ export async function ibSync(
   const result = await runScript("scripts/ib_sync.py", {
     args,
     timeout: 30_000,
+    rawOutput: true,
   });
 
   if (!result.ok) return result;

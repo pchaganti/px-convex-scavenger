@@ -32,6 +32,8 @@ export interface RunScriptOptions<S extends TSchema | undefined = undefined> {
   detached?: boolean;
   /** Max stdout chars to keep. Default: 200 000. */
   maxOutput?: number;
+  /** If true, skip JSON parsing of stdout. Use for scripts that write to files instead. */
+  rawOutput?: boolean;
 }
 
 // ── Project root resolution ───────────────────────────────────────────
@@ -91,6 +93,7 @@ export function runScript<T = unknown, S extends TSchema | undefined = undefined
     outputSchema,
     detached = false,
     maxOutput = 200_000,
+    rawOutput = false,
   } = opts;
 
   return new Promise((resolve) => {
@@ -141,6 +144,12 @@ export function runScript<T = unknown, S extends TSchema | undefined = undefined
 
       if (code !== 0) {
         resolve({ ok: false, exitCode: code, stderr });
+        return;
+      }
+
+      // Skip JSON parsing for scripts that write to files instead of stdout
+      if (rawOutput) {
+        resolve({ ok: true, data: stdout as S extends TSchema ? Static<S> : T });
         return;
       }
 

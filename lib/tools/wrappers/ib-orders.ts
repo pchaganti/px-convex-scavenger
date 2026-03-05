@@ -22,6 +22,7 @@ export async function ibOrders(
   const result = await runScript("scripts/ib_orders.py", {
     args,
     timeout: 30_000,
+    rawOutput: true,
   });
 
   if (!result.ok) return result;
