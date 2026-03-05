@@ -67,6 +67,7 @@ CLIENT_IDS: dict = {
     "ib_fill_monitor": 52,
     "exit_order_service": 60,
     "fetch_analyst_ratings": 99,
+    "ib_place_order": 26,
     "ib_realtime_server": 100,
 }
 

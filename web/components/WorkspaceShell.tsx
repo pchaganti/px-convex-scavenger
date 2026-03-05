@@ -12,7 +12,7 @@ import { useToast } from "@/lib/useToast";
 import { useOrderActions } from "@/lib/OrderActionsContext";
 import { usePrices } from "@/lib/usePrices";
 import { usePreviousClose } from "@/lib/usePreviousClose";
-import { type OptionContract, portfolioLegToContract } from "@/lib/pricesProtocol";
+import { type OptionContract, optionKey, portfolioLegToContract } from "@/lib/pricesProtocol";
 import Sidebar from "@/components/Sidebar";
 import Header from "@/components/Header";
 import ChatPanel from "@/components/ChatPanel";
@@ -20,6 +20,8 @@ import MetricCards from "@/components/MetricCards";
 import WorkspaceSections from "@/components/WorkspaceSections";
 import ConnectionBanner from "@/components/ConnectionBanner";
 import ToastContainer from "@/components/Toast";
+import TickerDetailModal from "@/components/TickerDetailModal";
+import { useTickerDetail } from "@/lib/TickerDetailContext";
 
 type WorkspaceShellProps = {
   section?: WorkspaceSection;
@@ -62,18 +64,44 @@ export default function WorkspaceShell({ section }: WorkspaceShellProps) {
     [orders],
   );
 
+  const orderContracts = useMemo<OptionContract[]>(() => {
+    const contracts: OptionContract[] = [];
+    for (const o of orders?.open_orders ?? []) {
+      const c = o.contract;
+      if (c.secType !== "OPT" || c.strike == null || !c.right || !c.expiry) continue;
+      const right = c.right === "C" || c.right === "P"
+        ? c.right
+        : c.right === "CALL" ? "C" : c.right === "PUT" ? "P" : null;
+      if (!right) continue;
+      const expiryClean = c.expiry.replace(/-/g, "");
+      if (expiryClean.length !== 8) continue;
+      contracts.push({ symbol: c.symbol.toUpperCase(), expiry: expiryClean, strike: c.strike, right });
+    }
+    return contracts;
+  }, [orders]);
+
   const allSymbols = useMemo(
     () => [...new Set([...portfolioSymbols, ...orderSymbols])],
     [portfolioSymbols, orderSymbols],
   );
 
+  const allContracts = useMemo(
+    () => [...portfolioContracts, ...orderContracts],
+    [portfolioContracts, orderContracts],
+  );
+
   const { prices: rawPrices, connected: wsConnected, ibConnected } = usePrices({
     symbols: allSymbols,
-    contracts: portfolioContracts,
+    contracts: allContracts,
   });
 
   // Backfill missing previous-close from Yahoo Finance / UW for day-change calc
   const prices = usePreviousClose(rawPrices);
+
+  // Sync prices + portfolio into ticker-detail context (refs, no re-renders)
+  const { setPrices: setTickerPrices, setPortfolio: setTickerPortfolio } = useTickerDetail();
+  useEffect(() => { setTickerPrices(prices); }, [prices, setTickerPrices]);
+  useEffect(() => { setTickerPortfolio(portfolio); }, [portfolio, setTickerPortfolio]);
 
   const prevIbConnectedRef = useRef<boolean | null>(null);
   useEffect(() => {
@@ -170,6 +198,7 @@ export default function WorkspaceShell({ section }: WorkspaceShellProps) {
         </div>
       </main>
 
+      <TickerDetailModal />
       <ToastContainer toasts={toasts} onDismiss={removeToast} />
     </div>
   );

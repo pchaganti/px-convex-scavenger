@@ -8,9 +8,10 @@ type ModalProps = {
   onClose: () => void;
   title: string;
   children: React.ReactNode;
+  className?: string;
 };
 
-export default function Modal({ open, onClose, title, children }: ModalProps) {
+export default function Modal({ open, onClose, title, children, className }: ModalProps) {
   const contentRef = useRef<HTMLDivElement>(null);
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -42,7 +43,7 @@ export default function Modal({ open, onClose, title, children }: ModalProps) {
   if (!open) return null;
 
   return createPortal(
-    <div className="modal-backdrop" onClick={handleBackdropClick}>
+    <div className={`modal-backdrop ${className ?? ""}`} onClick={handleBackdropClick}>
       <div className="modal-content" ref={contentRef} tabIndex={-1}>
         <div className="modal-header">
           <span className="modal-title">{title}</span>

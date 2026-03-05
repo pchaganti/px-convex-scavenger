@@ -27,8 +27,20 @@ import { useJournal } from "@/lib/useJournal";
 import { useDiscover } from "@/lib/useDiscover";
 import { useBlotter } from "@/lib/useBlotter";
 import { useSort, type SortDirection } from "@/lib/useSort";
+import { useTickerDetail } from "@/lib/TickerDetailContext";
 import CancelOrderDialog from "./CancelOrderDialog";
 import ModifyOrderModal from "./ModifyOrderModal";
+
+/* ─── Ticker link (clickable) ──────────────────────────── */
+
+function TickerLink({ ticker }: { ticker: string }) {
+  const { openTicker } = useTickerDetail();
+  return (
+    <strong className="ticker-link" onClick={() => openTicker(ticker)}>
+      {ticker}
+    </strong>
+  );
+}
 
 /* ─── Sortable header cell ──────────────────────────────── */
 
@@ -134,7 +146,7 @@ function FlowSections() {
             <tbody>
               {supSort.sorted.map((item) => (
                 <tr key={`support-${item.ticker}`}>
-                  <td><strong>{item.ticker}</strong></td>
+                  <td><TickerLink ticker={item.ticker} /></td>
                   <td>{item.position}</td>
                   <td><span className={`pill ${item.flowClass}`}>{item.flowLabel}</span></td>
                   <td>
@@ -173,7 +185,7 @@ function FlowSections() {
             <tbody>
               {againstSort.sorted.map((item) => (
                 <tr key={`against-${item.ticker}`}>
-                  <td><strong>{item.ticker}</strong></td>
+                  <td><TickerLink ticker={item.ticker} /></td>
                   <td>{item.position}</td>
                   <td><span className={`pill ${item.flowClass}`}>{item.flowLabel}</span></td>
                   <td>
@@ -212,7 +224,7 @@ function FlowSections() {
               <tbody>
                 {wSort.sorted.map((item) => (
                   <tr key={item.ticker}>
-                    <td><strong>{item.ticker}</strong></td>
+                    <td><TickerLink ticker={item.ticker} /></td>
                     <td>{item.position}</td>
                     <td><span className={`pill ${item.className}`}>{item.flow}</span></td>
                     <td>{item.note}</td>
@@ -269,7 +281,7 @@ export const fmtUsd = (n: number) => `$${n.toLocaleString("en-US", { maximumFrac
 export const fmtPrice = (n: number) => `$${n.toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 export const fmtPriceOrCalculated = (n: number, isCalculated: boolean) => isCalculated ? `C${fmtPrice(n)}` : fmtPrice(n);
 
-function resolveMarketValue(pos: PortfolioPosition): number | null {
+export function resolveMarketValue(pos: PortfolioPosition): number | null {
   // For multi-leg positions, always recompute sign-aware from legs
   if (pos.legs.length > 1) {
     const known = pos.legs.filter((l) => l.market_value != null);
@@ -284,11 +296,11 @@ function resolveMarketValue(pos: PortfolioPosition): number | null {
   return single?.market_value ?? null;
 }
 
-function getMultiplier(pos: PortfolioPosition): number {
+export function getMultiplier(pos: PortfolioPosition): number {
   return pos.structure_type === "Stock" ? 1 : 100;
 }
 
-function resolveEntryCost(pos: PortfolioPosition): number {
+export function resolveEntryCost(pos: PortfolioPosition): number {
   if (pos.legs.length > 1) {
     return pos.legs.reduce((s, l) => {
       const sign = l.direction === "LONG" ? 1 : -1;
@@ -298,7 +310,7 @@ function resolveEntryCost(pos: PortfolioPosition): number {
   return pos.entry_cost;
 }
 
-function getAvgEntry(pos: PortfolioPosition): number {
+export function getAvgEntry(pos: PortfolioPosition): number {
   const mult = getMultiplier(pos);
   return resolveEntryCost(pos) / (pos.contracts * mult);
 }
@@ -362,7 +374,7 @@ function usePriceDirection(price: number | null): {
  * Build a composite price key for a leg within a position.
  * Returns null for Stock legs or missing data.
  */
-function legPriceKey(
+export function legPriceKey(
   ticker: string,
   expiry: string,
   leg: { type: string; strike: number | null },
@@ -480,7 +492,7 @@ function PositionRow({ pos, showExpiry = true, showStrike = false, showUnderlyin
   return (
     <>
       <tr className={flashDirection ? `last-price-${flashDirection}` : undefined}>
-        <td><strong>{pos.ticker}</strong></td>
+        <td><TickerLink ticker={pos.ticker} /></td>
         <td>{structureDisplay}</td>
         <td className="right">{pos.contracts}</td>
         <td>
@@ -816,7 +828,7 @@ function DiscoverSections() {
               <tbody>
                 {candidates.map((c) => (
                   <tr key={c.ticker}>
-                    <td><strong>{c.ticker}</strong></td>
+                    <td><TickerLink ticker={c.ticker} /></td>
                     <td className="right">
                       <span className={scoreClass(c.score)}>{c.score.toFixed(1)}</span>
                     </td>
@@ -907,7 +919,7 @@ function JournalSections() {
                     <tr key={t.id}>
                       <td style={{ opacity: 0.5 }}>{t.id}</td>
                       <td>{t.date}</td>
-                      <td><strong>{t.ticker}</strong></td>
+                      <td><TickerLink ticker={t.ticker} /></td>
                       <td>{t.structure}</td>
                       <td><span className={decisionClass(t.decision)}>{t.decision}</span></td>
                       <td className="right">{qty ?? "—"}</td>
@@ -933,6 +945,27 @@ function JournalSections() {
 
 type OpenOrderKey = "symbol" | "action" | "orderType" | "totalQuantity" | "limitPrice" | "lastPrice" | "status" | "tif" | "actions";
 
+/** Build the prices-map key for an order's contract (option key for options, symbol for stocks). */
+function orderPriceKey(contract: OpenOrder["contract"]): string {
+  if (
+    contract.secType === "OPT" &&
+    contract.strike != null &&
+    contract.right &&
+    contract.expiry
+  ) {
+    const right = contract.right === "C" || contract.right === "P"
+      ? contract.right
+      : contract.right === "CALL" ? "C" : contract.right === "PUT" ? "P" : null;
+    if (right) {
+      const expiryClean = contract.expiry.replace(/-/g, "");
+      if (expiryClean.length === 8) {
+        return optionKey({ symbol: contract.symbol.toUpperCase(), expiry: expiryClean, strike: contract.strike, right });
+      }
+    }
+  }
+  return contract.symbol;
+}
+
 function makeOpenOrderExtract(prices?: Record<string, PriceData>) {
   return (item: OpenOrder, key: OpenOrderKey): string | number | null => {
     switch (key) {
@@ -941,7 +974,7 @@ function makeOpenOrderExtract(prices?: Record<string, PriceData>) {
       case "orderType": return item.orderType;
       case "totalQuantity": return item.totalQuantity;
       case "limitPrice": return item.limitPrice;
-      case "lastPrice": return prices?.[item.contract.symbol]?.last ?? null;
+      case "lastPrice": return prices?.[orderPriceKey(item.contract)]?.last ?? null;
       case "status": return item.status;
       case "tif": return item.tif;
       case "actions": return null;
@@ -1097,7 +1130,7 @@ function OrdersSections({
                   return (
                     <tr key={`${o.orderId}-${i}`} className={isPendingCancel ? "row-pending-cancel" : isPendingModify ? "row-pending-modify" : undefined}>
                       <td>
-                        <strong>{o.symbol}</strong>
+                        <TickerLink ticker={o.symbol} />
                         {isPending && <Loader2 size={12} className="cancel-spinner" />}
                       </td>
                       <td>
@@ -1114,7 +1147,7 @@ function OrdersSections({
                           o.limitPrice != null ? fmtPrice(o.limitPrice) : "—"
                         )}
                       </td>
-                      <OrderPriceCell price={prices?.[o.contract.symbol]?.last ?? null} />
+                      <OrderPriceCell price={prices?.[orderPriceKey(o.contract)]?.last ?? null} />
                       <td>
                         {isPendingCancel ? (
                           <span className="status-cancelling">Cancelling...</span>
@@ -1187,7 +1220,7 @@ function OrdersSections({
                   return (
                     <tr key={`${e.execId}-${i}`} className={isCancelled ? "row-cancelled" : undefined}>
                       <td>
-                        <strong>{e.symbol}</strong>
+                        <TickerLink ticker={e.symbol} />
                         {isCancelled && <XCircle size={12} className="cancelled-icon" />}
                       </td>
                       <td>
@@ -1329,7 +1362,7 @@ function HistoricalTradesSection() {
                 {pageRows.map((t, i) => (
                   <tr key={`${t.symbol}-${t.contract_desc}-${i}`}>
                     <td>{getTradeDate(t) ? new Date(getTradeDate(t)).toLocaleDateString() : "—"}</td>
-                    <td><strong>{t.symbol}</strong></td>
+                    <td><TickerLink ticker={t.symbol} /></td>
                     <td>{t.contract_desc}</td>
                     <td>{t.sec_type}</td>
                     <td>
