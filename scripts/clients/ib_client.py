@@ -59,9 +59,9 @@ class IBContractError(IBError):
 
 CLIENT_IDS: dict = {
     "ib_order_manage": 0,
-    "ib_sync": 10,
+    "ib_sync": 0,
     "ib_orders": 11,
-    "ib_reconcile": 12,
+    "ib_reconcile": 0,
     "ib_order": 2,
     "ib_execute": 25,
     "ib_fill_monitor": 52,
@@ -281,6 +281,18 @@ class IBClient:
         """Return account summary values."""
         self._require_connection()
         return self._ib.accountSummary(account=group)
+
+    def get_pnl(self, account: str = "") -> Any:
+        """Request P&L for account. Returns PnL with dailyPnL, unrealizedPnL, realizedPnL."""
+        self._require_connection()
+        pnl = self._ib.reqPnL(account)
+        self._ib.sleep(2)
+        return pnl
+
+    def cancel_pnl(self, pnl_obj: Any) -> None:
+        """Cancel P&L subscription."""
+        if pnl_obj:
+            self._ib.cancelPnL(pnl_obj)
 
     # -- order operations ---------------------------------------------------
 

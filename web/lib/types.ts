@@ -127,6 +127,18 @@ export type OrdersData = {
   executed_count: number;
 };
 
+export type AccountSummary = {
+  net_liquidation: number;
+  daily_pnl: number | null;
+  unrealized_pnl: number;
+  realized_pnl: number;
+  settled_cash: number;
+  maintenance_margin: number;
+  excess_liquidity: number;
+  buying_power: number;
+  dividends: number;
+};
+
 export type PortfolioData = {
   bankroll: number;
   peak_value: number;
@@ -139,6 +151,7 @@ export type PortfolioData = {
   defined_risk_count: number;
   undefined_risk_count: number;
   avg_kelly_optimal: number | null;
+  account_summary?: AccountSummary;
 };
 
 // Trade journal types

@@ -53,17 +53,55 @@ def connect_ib(host: str, port: int, client_id: int) -> IBClient:
         sys.exit(1)
 
 
+ACCOUNT_TAGS = [
+    'NetLiquidation', 'TotalCashValue',
+    'UnrealizedPnL', 'RealizedPnL',
+    'AccruedCash', 'NetDividend',
+    'MaintMarginReq', 'ExcessLiquidity', 'BuyingPower',
+    'AvailableFunds', 'Cushion',
+]
+
+
 def get_account_summary(client: IBClient) -> dict:
-    """Fetch account summary (cash, net liquidation, etc.)"""
+    """Fetch account summary (cash, net liquidation, margin, etc.)"""
     account_values = client.get_account_summary()
-    
+
     summary = {}
     for av in account_values:
-        if av.tag in ['NetLiquidation', 'TotalCashValue', 'AvailableFunds', 'BuyingPower']:
-            if av.currency == 'USD':
-                summary[av.tag] = float(av.value)
-    
+        if av.tag in ACCOUNT_TAGS and av.currency == 'USD':
+            summary[av.tag] = float(av.value)
+
     return summary
+
+
+def get_pnl(client: IBClient, account: str = "") -> dict:
+    """Fetch daily P&L via reqPnL. Polls up to 10s for data to arrive."""
+    from ib_insync import util as ib_util
+
+    def _valid(val):
+        return val is not None and not ib_util.isNan(val)
+
+    try:
+        pnl = client.get_pnl(account)
+        # Poll until dailyPnL is non-NaN (IB streams this asynchronously)
+        for _ in range(8):  # 8 x 1s = 8s max on top of the 2s in get_pnl
+            if pnl and _valid(getattr(pnl, 'dailyPnL', None)):
+                break
+            client.sleep(1)
+
+        result = {}
+        if pnl and hasattr(pnl, 'dailyPnL'):
+            daily = pnl.dailyPnL
+            unrealized = pnl.unrealizedPnL
+            realized = pnl.realizedPnL
+            result['dailyPnL'] = float(daily) if _valid(daily) else None
+            result['unrealizedPnL'] = float(unrealized) if _valid(unrealized) else None
+            result['realizedPnL'] = float(realized) if _valid(realized) else None
+        client.cancel_pnl(pnl)
+        return result
+    except Exception as e:
+        print(f"  Warning: reqPnL failed: {e}")
+        return {}
 
 
 def format_option_structure(contract, position) -> str:
@@ -470,20 +508,57 @@ def display_portfolio(account: dict, positions: list, collapsed: list = None):
     print("\n" + "="*70)
 
 
-def convert_to_portfolio_format(account: dict, collapsed_positions: list) -> dict:
+def build_account_summary(account: dict, pnl_data: dict) -> dict:
+    """Build account_summary dict from account values and PnL data.
+
+    Tag mapping:
+      settled_cash → TotalCashValue (not SettledCash — that tag doesn't exist in accountSummary)
+      dividends    → NetDividend (not AccruedCash — that's margin interest)
+      daily_pnl    → reqPnL().dailyPnL (only source for daily P&L)
+    """
+    def safe_float(val, default=0.0):
+        if val is None:
+            return default
+        try:
+            return float(val)
+        except (ValueError, TypeError):
+            return default
+
+    # Prefer reqPnL for unrealized/realized (real-time), fall back to accountSummary
+    unrealized = pnl_data.get('unrealizedPnL')
+    if unrealized is None:
+        unrealized = account.get('UnrealizedPnL')
+    realized = pnl_data.get('realizedPnL')
+    if realized is None:
+        realized = account.get('RealizedPnL')
+
+    return {
+        "net_liquidation": safe_float(account.get('NetLiquidation')),
+        "daily_pnl": pnl_data.get('dailyPnL'),  # None when unavailable, not 0
+        "unrealized_pnl": safe_float(unrealized),
+        "realized_pnl": safe_float(realized),
+        "settled_cash": safe_float(account.get('TotalCashValue')),
+        "maintenance_margin": safe_float(account.get('MaintMarginReq')),
+        "excess_liquidity": safe_float(account.get('ExcessLiquidity')),
+        "buying_power": safe_float(account.get('BuyingPower')),
+        "dividends": safe_float(account.get('NetDividend')),
+    }
+
+
+def convert_to_portfolio_format(account: dict, collapsed_positions: list, pnl_data: Optional[dict] = None) -> dict:
     """Convert IB data to portfolio.json format using collapsed positions"""
-    
+
     bankroll = account.get('NetLiquidation', account.get('TotalCashValue', 0))
-    
+
     # Calculate totals from collapsed positions
     total_deployed = sum(p['entry_cost'] for p in collapsed_positions)
     deployed_pct = (total_deployed / bankroll * 100) if bankroll > 0 else 0
-    
+
     # Add entry_date to positions
     for pos in collapsed_positions:
         pos['entry_date'] = datetime.now().strftime("%Y-%m-%d")  # IB doesn't provide this easily
-    
-    return {
+
+    result = {
         "bankroll": round(bankroll, 2),
         "peak_value": round(bankroll, 2),  # Would need historical tracking
         "last_sync": datetime.now().isoformat(),
@@ -494,8 +569,11 @@ def convert_to_portfolio_format(account: dict, collapsed_positions: list) -> dic
         "position_count": len(collapsed_positions),
         "defined_risk_count": len([p for p in collapsed_positions if p['risk_profile'] == 'defined']),
         "undefined_risk_count": len([p for p in collapsed_positions if p['risk_profile'] != 'defined']),
-        "avg_kelly_optimal": None  # Needs evaluation
+        "avg_kelly_optimal": None,  # Needs evaluation
+        "account_summary": build_account_summary(account, pnl_data or {}),
     }
+
+    return result
 
 
 def save_portfolio(portfolio: dict):
@@ -531,6 +609,9 @@ def main():
         print("Fetching account summary...")
         account = get_account_summary(client)
 
+        print("Fetching P&L...")
+        pnl_data = get_pnl(client)
+
         print("Fetching positions...")
         positions = fetch_positions(client)
 
@@ -557,7 +638,7 @@ def main():
 
         # Sync if requested
         if args.sync:
-            portfolio = convert_to_portfolio_format(account, collapsed)
+            portfolio = convert_to_portfolio_format(account, collapsed, pnl_data)
             save_portfolio(portfolio)
             print("\n⚠️  Note: kelly_optimal, target, and stop fields need manual evaluation")
         else:

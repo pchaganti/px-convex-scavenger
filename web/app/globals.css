@@ -332,6 +332,13 @@ body {
   margin-bottom: 20px;
 }
 
+.metrics-grid-5 {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 0;
+  margin-bottom: 20px;
+}
+
 .metrics-grid-3 {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -1060,6 +1067,10 @@ tr:last-child td {
     grid-template-columns: repeat(2, 1fr);
   }
 
+  .metrics-grid-5 {
+    grid-template-columns: repeat(3, 1fr);
+  }
+
   .metrics-grid-3 {
     grid-template-columns: repeat(2, 1fr);
   }
@@ -1071,6 +1082,10 @@ tr:last-child td {
   }
 
   .metrics-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .metrics-grid-5 {
     grid-template-columns: 1fr;
   }
 
@@ -2112,3 +2127,12 @@ tr {
 .seasonality-cell-nodata { opacity: 0.4; }
 .seasonality-cell-nodata-text { font-family: var(--font-mono); font-size: 9px; color: var(--text-muted); font-style: italic; padding: 4px 0; }
 .seasonality-row-nodata { opacity: 0.5; }
+
+/* ── Instrument Detail Modal ── */
+
+.instrument-detail-modal .modal-content { width: 480px; }
+
+.instrument-summary-grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin-bottom: 12px; }
+
+.leg-clickable { cursor: pointer; transition: color 150ms ease-in-out; }
+.leg-clickable:hover { color: var(--text-primary); opacity: 1; text-decoration: underline; text-underline-offset: 2px; }

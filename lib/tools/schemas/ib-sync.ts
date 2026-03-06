@@ -46,6 +46,18 @@ const PortfolioPosition = Type.Object({
   entry_date: Type.String(),
 });
 
+const AccountSummary = Type.Object({
+  net_liquidation: Type.Number(),
+  daily_pnl: Type.Union([Type.Number(), Type.Null()]),
+  unrealized_pnl: Type.Number(),
+  realized_pnl: Type.Number(),
+  settled_cash: Type.Number(),
+  maintenance_margin: Type.Number(),
+  excess_liquidity: Type.Number(),
+  buying_power: Type.Number(),
+  dividends: Type.Number(),
+});
+
 export const PortfolioData = Type.Object({
   bankroll: Type.Number(),
   peak_value: Type.Number(),
@@ -58,6 +70,7 @@ export const PortfolioData = Type.Object({
   defined_risk_count: Type.Number(),
   undefined_risk_count: Type.Number(),
   avg_kelly_optimal: Type.Union([Type.Number(), Type.Null()]),
+  account_summary: Type.Optional(AccountSummary),
 });
 
 export type PortfolioData = Static<typeof PortfolioData>;
