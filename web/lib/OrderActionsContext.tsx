@@ -30,7 +30,7 @@ type OrderActionsContextValue = {
   pendingModifies: Map<number, PendingModify>;
   cancelledOrders: CancelledOrder[];
   requestCancel: (order: OpenOrder) => Promise<void>;
-  requestModify: (order: OpenOrder, newPrice: number) => Promise<void>;
+  requestModify: (order: OpenOrder, newPrice: number, outsideRth?: boolean) => Promise<void>;
   drainNotifications: () => Notification[];
   setOrdersUpdater: (fn: ((data: OrdersData) => void) | null) => void;
 };
@@ -83,13 +83,16 @@ export function OrderActionsProvider({ children }: { children: ReactNode }) {
     const permId = order.permId;
     pollCountsRef.current.set(permId, 0);
 
-    const interval = setInterval(async () => {
+    const tick = async () => {
       const count = (pollCountsRef.current.get(permId) ?? 0) + 1;
       pollCountsRef.current.set(permId, count);
 
       try {
         const res = await fetch("/api/orders", { method: "POST" });
-        if (!res.ok) return;
+        if (!res.ok) {
+          scheduleNext();
+          return;
+        }
         const data = (await res.json()) as OrdersData;
 
         const stillOpen = data.open_orders.some(
@@ -97,7 +100,6 @@ export function OrderActionsProvider({ children }: { children: ReactNode }) {
         );
 
         if (!stillOpen) {
-          clearInterval(interval);
           pollTimersRef.current.delete(permId);
           pollCountsRef.current.delete(permId);
 
@@ -122,7 +124,6 @@ export function OrderActionsProvider({ children }: { children: ReactNode }) {
           pushOrdersData(data);
           pushNotification({ type: "success", message: `${order.symbol} order cancelled` });
         } else if (count >= POLL_MAX_COUNT) {
-          clearInterval(interval);
           pollTimersRef.current.delete(permId);
           pollCountsRef.current.delete(permId);
           setPendingCancels((prev) => {
@@ -138,13 +139,19 @@ export function OrderActionsProvider({ children }: { children: ReactNode }) {
           });
         } else {
           pushOrdersData(data);
+          scheduleNext();
         }
       } catch {
-        // Network error, keep polling
+        scheduleNext();
       }
-    }, POLL_INTERVAL_MS);
+    };
 
-    pollTimersRef.current.set(permId, interval);
+    const scheduleNext = () => {
+      const timer = setTimeout(tick, POLL_INTERVAL_MS);
+      pollTimersRef.current.set(permId, timer);
+    };
+
+    scheduleNext();
   }, [pushNotification, pushOrdersData]);
 
   const requestCancel = useCallback(async (order: OpenOrder) => {
@@ -173,13 +180,16 @@ export function OrderActionsProvider({ children }: { children: ReactNode }) {
     const permId = order.permId;
     pollCountsRef.current.set(permId, 0);
 
-    const interval = setInterval(async () => {
+    const tick = async () => {
       const count = (pollCountsRef.current.get(permId) ?? 0) + 1;
       pollCountsRef.current.set(permId, count);
 
       try {
         const res = await fetch("/api/orders", { method: "POST" });
-        if (!res.ok) return;
+        if (!res.ok) {
+          scheduleNext();
+          return;
+        }
         const data = (await res.json()) as OrdersData;
 
         const ibOrder = data.open_orders.find((o) => o.permId === permId);
@@ -188,7 +198,6 @@ export function OrderActionsProvider({ children }: { children: ReactNode }) {
         const confirmed = ibOrder && ibOrder.limitPrice != null && Math.abs(ibOrder.limitPrice - newPrice) < 0.001;
 
         if (confirmed) {
-          clearInterval(interval);
           pollTimersRef.current.delete(permId);
           pollCountsRef.current.delete(permId);
 
@@ -205,7 +214,6 @@ export function OrderActionsProvider({ children }: { children: ReactNode }) {
             message: `${order.symbol} order confirmed at $${newPrice.toFixed(2)}`,
           });
         } else if (count >= POLL_MAX_COUNT) {
-          clearInterval(interval);
           pollTimersRef.current.delete(permId);
           pollCountsRef.current.delete(permId);
 
@@ -225,21 +233,27 @@ export function OrderActionsProvider({ children }: { children: ReactNode }) {
         } else {
           // Still pending — push data with optimistic overlay
           pushOrdersData(data);
+          scheduleNext();
         }
       } catch {
-        // Network error, keep polling
+        scheduleNext();
       }
-    }, POLL_INTERVAL_MS);
+    };
 
-    pollTimersRef.current.set(permId, interval);
+    const scheduleNext = () => {
+      const timer = setTimeout(tick, POLL_INTERVAL_MS);
+      pollTimersRef.current.set(permId, timer);
+    };
+
+    scheduleNext();
   }, [pushNotification, pushOrdersData]);
 
-  const requestModify = useCallback(async (order: OpenOrder, newPrice: number) => {
+  const requestModify = useCallback(async (order: OpenOrder, newPrice: number, outsideRth?: boolean) => {
     try {
       const res = await fetch("/api/orders/modify", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ orderId: order.orderId, permId: order.permId, newPrice }),
+        body: JSON.stringify({ orderId: order.orderId, permId: order.permId, newPrice, outsideRth }),
       });
       const json = await res.json();
       if (!res.ok) {
@@ -274,11 +288,11 @@ export function OrderActionsProvider({ children }: { children: ReactNode }) {
     ordersUpdaterRef.current = fn;
   }, []);
 
-  // Cleanup all poll intervals on unmount
+  // Cleanup all poll timers on unmount
   useEffect(() => {
     return () => {
       for (const timer of pollTimersRef.current.values()) {
-        clearInterval(timer);
+        clearTimeout(timer);
       }
     };
   }, []);

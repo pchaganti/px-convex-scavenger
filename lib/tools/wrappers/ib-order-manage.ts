@@ -33,6 +33,8 @@ export async function ibModifyOrder(input: IBModifyInput): Promise<ManageResult>
     "--new-price", String(input.newPrice),
   ];
 
+  if (input.outsideRth === true) args.push("--outside-rth");
+  else if (input.outsideRth === false) args.push("--no-outside-rth");
   if (input.host) args.push("--host", input.host);
   args.push("--port", String(input.port ?? 4001));
 

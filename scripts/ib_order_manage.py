@@ -107,7 +107,7 @@ def cancel_order(client: IBClient, order_id: int, perm_id: int,
 
 
 def modify_order(client: IBClient, order_id: int, perm_id: int, new_price: float,
-                 host: str, port: int):
+                 host: str, port: int, outside_rth=None):
     """Modify limit price of an open order.
 
     IB's placeOrder is scoped by (clientId, orderId) -- a modify from a
@@ -149,6 +149,8 @@ def modify_order(client: IBClient, order_id: int, perm_id: int, new_price: float
 
     old_price = trade.order.lmtPrice
     trade.order.lmtPrice = new_price
+    if outside_rth is not None:
+        trade.order.outsideRth = outside_rth
     client.place_order(trade.contract, trade.order)
 
     # Wait for acknowledgement or fatal error
@@ -184,6 +186,10 @@ def main():
     modify_p.add_argument("--order-id", type=int, default=0)
     modify_p.add_argument("--perm-id", type=int, default=0)
     modify_p.add_argument("--new-price", type=float, required=True)
+    modify_p.add_argument("--outside-rth", action="store_true", default=None,
+                          help="Allow order to fill outside regular trading hours")
+    modify_p.add_argument("--no-outside-rth", dest="outside_rth", action="store_false",
+                          help="Restrict order to regular trading hours only")
     modify_p.add_argument("--host", default=DEFAULT_HOST)
     modify_p.add_argument("--port", type=int, default=DEFAULT_PORT)
 
@@ -204,7 +210,7 @@ def main():
                          args.host, args.port)
         elif args.action == "modify":
             modify_order(client, args.order_id, args.perm_id, args.new_price,
-                         args.host, args.port)
+                         args.host, args.port, outside_rth=args.outside_rth)
     finally:
         client.disconnect()
 

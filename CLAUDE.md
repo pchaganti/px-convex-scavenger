@@ -78,6 +78,7 @@ TZ=America/New_York date +"%A %H:%M"   # Check if market open (9:30–16:00 ET, 
 | `seasonal [TICKERS]` | Monthly seasonality assessment |
 | `x-scan [@ACCOUNT]` | Extract ticker sentiment from X posts |
 | `analyst-ratings [TICKERS]` | Ratings, changes, price targets |
+| `vcg-scan` | Cross-asset volatility-credit gap divergence signal |
 
 ---
 
@@ -103,6 +104,7 @@ TZ=America/New_York date +"%A %H:%M"   # Check if market open (9:30–16:00 ET, 
 | `scripts/ib_order_manage.py` | Cancel or modify open IB orders |
 | `scripts/ib_place_order.py` | JSON-in/JSON-out order placement for web API (client ID 26) |
 | `scripts/fetch_x_watchlist.py` | X account tweet sentiment |
+| `scripts/vcg_scan.py` | Volatility-Credit Gap divergence scanner |
 
 ---
 
@@ -215,6 +217,23 @@ P&L % = (Market Value - Entry Cost) / |Entry Cost| × 100
 
 This correctly uses entry cost as the denominator because it measures return on capital deployed over the life of the position.
 
+### Per-Leg P&L (expanded combo rows)
+
+```
+Leg P&L = sign × (|Market Value| − |Entry Cost|)
+
+Where sign = +1 for LONG legs, −1 for SHORT legs
+```
+
+| Leg Direction | Interpretation |
+|---------------|----------------|
+| LONG | Profit when option appreciates: MV − EC |
+| SHORT | Profit when option decays: EC − MV |
+
+Sum of per-leg P&L equals the position-level P&L. Uses RT WS price when available, falls back to IB sync `market_value`.
+
+**Implementation**: `LegRow` in `PositionTable.tsx`.
+
 ### Return on Risk (trade log)
 
 ```
@@ -234,6 +253,7 @@ Capital at Risk:
 | Single-leg option | `prices[optionKey(...)].last` (option contract, NOT underlying) |
 | Multi-leg spread | Compute net from each leg's `prices[legPriceKey(...)]` |
 | BAG order last price | `resolveOrderLastPrice()` — net mid from portfolio legs |
+| BAG modify modal BID/MID/ASK | `resolveOrderPriceData()` in `ModifyOrderModal.tsx` — synthetic `PriceData` from per-leg WS bid/ask |
 | Order form BID/MID/ASK | Same resolved price data as PriceBar (option-level for options) |
 | PriceBar in modal | `resolvePriceBar()` — option-level for single-leg, underlying for multi-leg |
 

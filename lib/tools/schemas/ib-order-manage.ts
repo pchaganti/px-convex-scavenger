@@ -17,6 +17,7 @@ export const IBModifyInput = Type.Object({
   orderId: Type.Number({ description: "IB order ID" }),
   permId: Type.Number({ description: "IB permanent order ID" }),
   newPrice: Type.Number({ description: "New limit price" }),
+  outsideRth: Type.Optional(Type.Boolean({ description: "Allow fill outside regular trading hours" })),
   host: Type.Optional(Type.String()),
   port: Type.Optional(Type.Number()),
 });

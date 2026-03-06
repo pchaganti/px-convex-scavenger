@@ -210,6 +210,44 @@ class TestModifyOrder:
         assert exc.value.code == 0
         assert t.order.lmtPrice == 19.00
 
+    def test_modify_with_outside_rth_sets_flag(self):
+        """When outside_rth=True, the order's outsideRth attribute should be set to True."""
+        t = make_trade(status="Submitted", order_type="LMT", lmt_price=20.00)
+        t.order.outsideRth = False  # Default
+        client = make_client([t])
+        client.place_order = MagicMock()
+
+        with pytest.raises(SystemExit) as exc:
+            modify_order(client, 10, 12345, 22.50, "127.0.0.1", 4001, outside_rth=True)
+        assert exc.value.code == 0
+        assert t.order.outsideRth is True
+        assert t.order.lmtPrice == 22.50
+        client.place_order.assert_called_once_with(t.contract, t.order)
+
+    def test_modify_without_outside_rth_preserves_flag(self):
+        """When outside_rth is not set, the order's existing outsideRth should be preserved."""
+        t = make_trade(status="Submitted", order_type="LMT", lmt_price=20.00)
+        t.order.outsideRth = False
+        client = make_client([t])
+        client.place_order = MagicMock()
+
+        with pytest.raises(SystemExit) as exc:
+            modify_order(client, 10, 12345, 22.50, "127.0.0.1", 4001)
+        assert exc.value.code == 0
+        assert t.order.outsideRth is False  # Preserved, not changed
+
+    def test_modify_outside_rth_false_clears_flag(self):
+        """When outside_rth=False explicitly, clear the outsideRth flag even if it was True."""
+        t = make_trade(status="Submitted", order_type="LMT", lmt_price=20.00)
+        t.order.outsideRth = True  # Was previously set
+        client = make_client([t])
+        client.place_order = MagicMock()
+
+        with pytest.raises(SystemExit) as exc:
+            modify_order(client, 10, 12345, 22.50, "127.0.0.1", 4001, outside_rth=False)
+        assert exc.value.code == 0
+        assert t.order.outsideRth is False
+
 
 # ─── output ─────────────────────────────────────────────
 

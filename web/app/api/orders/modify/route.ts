@@ -10,6 +10,7 @@ type ModifyBody = {
   orderId?: number;
   permId?: number;
   newPrice?: number;
+  outsideRth?: boolean;
 };
 
 export async function POST(request: Request): Promise<Response> {
@@ -33,7 +34,8 @@ export async function POST(request: Request): Promise<Response> {
       );
     }
 
-    const result = await ibModifyOrder({ orderId, permId, newPrice, port: 4001 });
+    const outsideRth = body.outsideRth;
+    const result = await ibModifyOrder({ orderId, permId, newPrice, outsideRth, port: 4001 });
 
     if (!result.ok) {
       return NextResponse.json(

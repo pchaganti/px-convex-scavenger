@@ -827,28 +827,34 @@ function OrdersSections({
     setCancelTarget(null);
   }, [cancelTarget, requestCancel]);
 
-  const handleModify = useCallback(async (newPrice: number) => {
+  const handleModify = useCallback(async (newPrice: number, outsideRth?: boolean) => {
     if (!modifyTarget) return;
     setActionLoading(true);
-    await requestModify(modifyTarget, newPrice);
+    await requestModify(modifyTarget, newPrice, outsideRth);
     setActionLoading(false);
     setModifyTarget(null);
   }, [modifyTarget, requestModify]);
 
-  // Merge cancelled orders into executed list for display
+  // Merge cancelled orders into executed list for display (dedupe by permId)
   const allExecutedRows = useMemo(() => {
-    const cancelRows: ExecutedOrder[] = cancelledOrders.map((c) => ({
-      execId: `cancelled-${c.permId}`,
-      symbol: c.symbol,
-      contract: { conId: null, symbol: c.symbol, secType: "", strike: null, right: null, expiry: null },
-      side: "CANCELLED",
-      quantity: c.totalQuantity,
-      avgPrice: c.limitPrice,
-      commission: null,
-      realizedPNL: null,
-      time: c.cancelledAt,
-      exchange: "",
-    }));
+    const seen = new Set<number>();
+    const cancelRows: ExecutedOrder[] = [];
+    for (const c of cancelledOrders) {
+      if (seen.has(c.permId)) continue;
+      seen.add(c.permId);
+      cancelRows.push({
+        execId: `cancelled-${c.permId}`,
+        symbol: c.symbol,
+        contract: { conId: null, symbol: c.symbol, secType: "", strike: null, right: null, expiry: null },
+        side: "CANCELLED",
+        quantity: c.totalQuantity,
+        avgPrice: c.limitPrice,
+        commission: null,
+        realizedPNL: null,
+        time: c.cancelledAt,
+        exchange: "",
+      });
+    }
     return [...cancelRows, ...(orders?.executed_orders ?? [])];
   }, [cancelledOrders, orders?.executed_orders]);
 
@@ -886,6 +892,7 @@ function OrdersSections({
         order={modifyTarget}
         loading={actionLoading}
         prices={prices}
+        portfolio={portfolio}
         onConfirm={handleModify}
         onClose={() => setModifyTarget(null)}
       />

@@ -1693,6 +1693,47 @@ tr.leg-row td {
   cursor: not-allowed;
 }
 
+.modify-rth-toggle {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 10px;
+  cursor: pointer;
+}
+.modify-rth-toggle input[type="checkbox"] {
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border: 1px solid var(--border-dim);
+  background: transparent;
+  cursor: pointer;
+  position: relative;
+  flex-shrink: 0;
+}
+.modify-rth-toggle input[type="checkbox"]:checked {
+  border-color: var(--positive);
+  background: color-mix(in srgb, var(--positive) 20%, transparent);
+}
+.modify-rth-toggle input[type="checkbox"]:checked::after {
+  content: "";
+  position: absolute;
+  inset: 2px;
+  background: var(--positive);
+}
+.modify-rth-label {
+  font-family: var(--font-mono);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-primary);
+}
+.modify-rth-hint {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  color: var(--text-muted);
+  letter-spacing: 0.03em;
+}
+
 .modify-delta {
   font-family: var(--font-mono);
   font-size: 11px;

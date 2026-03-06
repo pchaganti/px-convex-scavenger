@@ -10,8 +10,10 @@ The Convex Scavenger employs four strategies, each exploiting informational or s
 | **LEAP IV Mispricing** | Volatility regime change | Long-dated calls | 1-3 years | Defined (long options) |
 | **GARCH Convergence** | Cross-asset repricing lag | Medium-dated options | 2-8 weeks | Defined (long options/spreads) |
 | **Risk Reversal** | IV skew exploitation | Sell put + Buy call | 2-8 weeks | **Undefined** (manager override) |
+| **Volatility-Credit Gap** | Vol/credit divergence | HY puts, CDX protection | 1-5 days | Defined (long puts/spreads) |
 
 See also: [`strategy-garch-convergence.md`](strategy-garch-convergence.md) for the full GARCH Convergence Spreads specification.
+See also: [`VCG_institutional_research_note.md`](VCG_institutional_research_note.md) for the full VCG mathematical specification.
 
 ---
 
@@ -442,6 +444,231 @@ python3 scripts/risk_reversal.py IWM --json
 
 ---
 
+## Strategy 5: Volatility-Credit Gap (VCG)
+
+### Thesis
+
+The volatility complex (VIX/VVIX) reprices faster than cash credit (HYG, JNK, LQD). When volatility spikes but credit markets remain calm, an unresolved divergence exists — credit is artificially stable and catch-up risk is elevated. The VCG detects this divergence quantitatively using a rolling regression model and generates a risk-off overlay signal.
+
+**The edge is timing, not direction.** VCG is a risk-budget override — it tells you *when* to reduce credit exposure, not a standalone directional bet.
+
+### Edge Source
+
+- **VVIX > 110**: Vol-of-vol signals convexity demand in the volatility complex
+- **HYG/JNK flat**: Credit hasn't repriced to match the vol signal
+- **VIX < 40**: Still in divergence discovery mode (not yet panic transmission)
+- **Standardized residual > 2σ**: Statistical confirmation the gap is actionable
+
+### VCG Metric
+
+Rolling 21-day OLS regresses daily credit changes on VIX and VVIX changes:
+
+```
+ΔC_t = α + β₁·ΔVVIX_t + β₂·ΔVIX_t + ε_t
+```
+
+The VCG is the standardized residual:
+
+```
+VCG_t = (ε_t - μ_ε) / σ_ε     (z-score over 63-day trailing window)
+```
+
+| VCG Value | Interpretation |
+|-----------|---------------|
+| VCG > +2 | Credit artificially calm — catch-up risk is high (RISK-OFF) |
+| VCG < -2 | Credit has overshot vol signal — tactical exhaustion possible |
+| -2 to +2 | Normal regime — no signal |
+
+### Signal Criteria
+
+Two-stage signal: **state flag** (HDR) then **trade trigger** (RO).
+
+**High Divergence Risk (HDR) — state flag:**
+
+| Criterion | Threshold | Notes |
+|-----------|-----------|-------|
+| VVIX level | > 110 | Vol-of-vol elevated |
+| 5-day credit return | > -0.5% | Credit hasn't sold off yet |
+| VIX level | < 40 | Below panic threshold |
+
+All three must be true simultaneously for HDR = 1.
+
+**Risk-Off (RO) — trade trigger:**
+
+| Criterion | Threshold | Notes |
+|-----------|-----------|-------|
+| HDR | = 1 | State conditions met |
+| VCG | > 2.0 | Standardized residual confirms gap |
+
+RO = 1 means the divergence is statistically large enough to act on.
+
+### Panic Overlay (Rule-of-16)
+
+VIX = 48 implies ~3% daily equity moves — the transition from growth scare to liquidity panic.
+
+| VIX Range | Regime | VCG Behavior |
+|-----------|--------|-------------|
+| < 40 | Divergence | Full VCG signal — classic unresolved gap |
+| 40-48 | Transition | VCG still valid but window to monetize is shorter |
+| ≥ 48 | Panic | VCG suppressed — market in panic transmission, not divergence |
+
+The panic-adjusted signal: `VCG_div = (1 - Π) × VCG` where Π ramps from 0→1 as VIX goes 40→48.
+
+### Credit Proxies
+
+| Proxy | Type | Notes |
+|-------|------|-------|
+| HYG | iShares HY Corp Bond | Primary — most liquid, purest HY credit |
+| JNK | SPDR HY Bond | Alternative — similar exposure |
+| LQD | iShares IG Corp Bond | Requires rate-hedging (duration component) |
+
+For LQD, use Treasury-hedged excess returns to isolate pure credit:
+```
+ΔC*_t = ΔC_t - Duration × ΔYield_UST
+```
+
+### Position Structure (when RO = 1)
+
+**Action sequence:** reduce credit beta → raise quality → add convex hedges.
+
+- **Primary**: Buy HYG puts (ATM or slightly OTM, 1-2 week expiry)
+- **Alternative**: Bear put spreads on HYG/JNK for defined risk
+- **Cross-asset**: Short credit vs. duration-matched Treasury
+- **Overlay**: Preserve existing equity downside hedges rather than monetizing early
+
+### Sizing
+
+- Fractional Kelly on estimated gap-closure probability
+- Hard cap: 2.5% of bankroll per VCG position
+- Position is a hedge/overlay — sized relative to existing credit exposure
+
+### Exit Criteria
+
+| Condition | Action |
+|-----------|--------|
+| VCG normalizes (< 1.0) | Close — divergence resolved |
+| Credit sells off (5d return < -1.5%) | Close — catch-up has occurred |
+| VIX > 48 | Close VCG positions — regime shift to panic |
+| HDR flips to 0 | Close — state conditions no longer met |
+| 5 trading days elapsed | Re-evaluate — gap may be structural, not transient |
+
+### Production Refinements
+
+1. **Orthogonalize VVIX**: Regress ΔVVIX on ΔVIX first, use residual ν_t in the main model. Isolates pure vol-of-vol shock from spot vol.
+
+2. **Sign discipline**: If β₁ or β₂ flip positive (estimation noise), hold previous estimate or suppress signal for that day. Expected signs: β₁ < 0, β₂ < 0 (higher vol = weaker credit).
+
+### Scripts
+
+```bash
+# Run VCG scan (check current divergence state)
+python3 scripts/vcg_scan.py
+
+# VCG with specific credit proxy
+python3 scripts/vcg_scan.py --proxy HYG
+
+# VCG with LQD (rate-hedged)
+python3 scripts/vcg_scan.py --proxy LQD --rate-hedge
+
+# Historical backtest
+python3 scripts/vcg_scan.py --backtest --days 252
+
+# JSON output
+python3 scripts/vcg_scan.py --json
+```
+
+### Output Reference — Field Definitions
+
+Every field in the VCG scan JSON output (`--json`) and HTML report is defined below.
+
+#### Header / Top-Level Fields
+
+| Field | JSON Key | Definition |
+|-------|----------|------------|
+| **Scan Time** | `scan_time` | ISO 8601 timestamp when the scan ran |
+| **Market Open** | `market_open` | Whether US equity market was open at scan time. If `false`, data is from last available close. |
+| **Credit Proxy** | `credit_proxy` | The ETF used as the credit variable in the regression. Default: `HYG` (iShares High Yield Corporate Bond). Alternatives: `JNK`, `LQD`. |
+
+#### Signal Card Metrics (top row of HTML report)
+
+| Metric | JSON Key | Definition |
+|--------|----------|------------|
+| **VCG (z-score)** | `signal.vcg` | The standardized residual from the rolling OLS regression. Measures how far credit's actual move deviates from what VIX/VVIX predict, normalized to standard deviations. **> +2**: credit is "too calm" — catch-up risk is high (risk-off trigger). **< -2**: credit has overshot the vol signal — tactical exhaustion possible. **-2 to +2**: normal, no signal. |
+| **VCG div** | `signal.vcg_div` | Panic-adjusted VCG. Formula: `(1 - Π) × VCG` where Π ramps from 0→1 as VIX goes 40→48. When VIX < 40, VCG div = VCG exactly. When VIX ≥ 48, VCG div = 0 (signal suppressed — market is in panic transmission, not divergence). |
+| **VIX** | `signal.vix` | CBOE Volatility Index — forward-looking measure of expected 30-day S&P 500 volatility. Quoted in annualized % points. Divide by 16 (√252) for approximate expected daily move. |
+| **VVIX** | `signal.vvix` | CBOE VIX-of-VIX — expected volatility of VIX itself. Measures convexity demand in the volatility complex. VVIX > 110 indicates elevated hedging demand and potential for rapid VIX moves. |
+| **Credit Price** | `signal.credit_price` | Last close of the credit proxy ETF (e.g., HYG at $79.69). |
+| **5d Return** | `signal.credit_5d_return_pct` | Simple 5-trading-day return on the credit proxy: `(C_t / C_{t-5}) - 1`, expressed as %. Used in the HDR gate — if credit has already sold off (< -0.5%), the "artificially calm" condition fails. |
+| **HDR** | `signal.hdr` | High Divergence Risk state flag. Binary (0 or 1). All three conditions must be true simultaneously: VVIX > 110, credit 5d return > -0.5%, VIX < 40. HDR = 1 means the market structure is consistent with unresolved divergence. HDR = 0 means at least one condition failed. |
+| **Risk-Off (RO)** | `signal.ro` | Trade trigger. Binary (0 or 1). `RO = 1{VCG > 2} × HDR`. Both the statistical gap AND the market structure conditions must be met. RO = 1 is the actionable signal. |
+
+#### HDR Conditions Table
+
+| Condition | JSON Key | Definition |
+|-----------|----------|------------|
+| **VVIX > 110** | `signal.hdr_conditions.vvix_gt_110` | Vol-of-vol is elevated — convexity demand in the volatility complex. PASS when VVIX exceeds 110. |
+| **Credit 5d Return > -0.5%** | `signal.hdr_conditions.credit_5d_gt_neg05pct` | Credit hasn't already sold off. If credit has dropped more than 0.5% in 5 days, the catch-up has already started and the divergence thesis weakens. PASS when 5d return is above -0.5%. |
+| **VIX < 40** | `signal.hdr_conditions.vix_lt_40` | Below panic threshold. VIX under 40 means the market is in divergence-discovery mode, not panic-transmission mode. PASS when VIX is below 40. |
+
+#### OLS Model Coefficients
+
+These come from the rolling 21-day ordinary least squares regression: `ΔC_t = α + β₁·ΔVVIX_t + β₂·ΔVIX_t + ε_t`, where ΔC, ΔVVIX, ΔVIX are daily log returns.
+
+| Coefficient | JSON Key | Definition |
+|-------------|----------|------------|
+| **α (intercept)** | `signal.alpha` | Regression intercept. The expected daily credit log-return when both VIX and VVIX are unchanged. Typically near zero. |
+| **β₁ (VVIX)** | `signal.beta1_vvix` | Sensitivity of credit returns to vol-of-vol changes. Expected sign: **negative** (higher VVIX → weaker credit). When positive, it indicates estimation noise in the 21-day window — sign discipline suppresses the signal. |
+| **β₂ (VIX)** | `signal.beta2_vix` | Sensitivity of credit returns to spot implied vol changes. Expected sign: **negative** (higher VIX → weaker credit). Same sign discipline applies. |
+| **Residual (ε)** | `signal.residual` | Today's model residual — the gap between what credit actually did and what the model predicted. `ε = ΔC_actual - (α + β₁·ΔVVIX + β₂·ΔVIX)`. Positive: credit stronger than expected. Negative: credit weaker than expected. This is the raw (un-standardized) input to the VCG z-score. |
+| **Sign Discipline** | `signal.sign_ok`, `signal.sign_suppressed` | Whether beta coefficients have the expected negative signs. If either β₁ or β₂ is positive, `sign_ok = false` and `sign_suppressed = true` — the signal is suppressed for that day regardless of VCG magnitude. This prevents acting on a model that contradicts the economic prior (higher vol = weaker credit). |
+
+#### Attribution Split
+
+| Field | JSON Key | Definition |
+|-------|----------|------------|
+| **VVIX Component** | `signal.attribution.vvix_component` | The portion of the model-implied credit move attributable to vol-of-vol: `β₁ × ΔVVIX_t`. Raw log-return units. |
+| **VIX Component** | `signal.attribution.vix_component` | The portion attributable to spot implied vol: `β₂ × ΔVIX_t`. Raw log-return units. |
+| **VVIX %** | `signal.attribution.vvix_pct` | VVIX component as a percentage of total model-implied move. Tells you whether the gap is being driven by convexity demand (high VVIX %) or by a broad rise in spot vol (high VIX %). |
+| **VIX %** | `signal.attribution.vix_pct` | VIX component as a percentage of total model-implied move. |
+| **Model Implied** | `signal.attribution.model_implied` | Total model-predicted credit move: `α + β₁·ΔVVIX + β₂·ΔVIX`. The residual is `ΔC_actual - model_implied`. |
+
+#### Regime & Panic Overlay
+
+| Field | JSON Key | Definition |
+|-------|----------|------------|
+| **Regime** | `signal.regime` | Current market regime based on VIX level. `DIVERGENCE` (VIX < 40): vol/credit divergences are tradeable. `TRANSITION` (40 ≤ VIX < 48): divergences still exist but the window to monetize is shorter. `PANIC` (VIX ≥ 48): liquidity panic, divergence signal suppressed. |
+| **Π (Pi Panic)** | `signal.pi_panic` | Panic transition scalar. `Π = clamp((VIX - 40) / 8, 0, 1)`. 0 = full divergence mode, 1 = full panic mode. Used to compute VCG div. |
+| **Interpretation** | `signal.interpretation` | Human-readable signal state. One of: `NORMAL` (no signal, VCG within ±2), `HDR_ACTIVE` (state conditions met but VCG < 2), `RISK_OFF` (RO = 1, actionable signal), `SUPPRESSED` (signal would fire but sign discipline prevents it). |
+
+#### Rolling History Table (last 10 trading days)
+
+| Column | JSON Key (per entry) | Definition |
+|--------|---------------------|------------|
+| **Date** | `history[].date` | Trading date (YYYY-MM-DD) |
+| **VIX** | `history[].vix` | VIX close on that date |
+| **VVIX** | `history[].vvix` | VVIX close on that date |
+| **Credit** | `history[].credit` | Credit proxy close price |
+| **Residual** | `history[].residual` | Raw model residual ε for that date |
+| **VCG** | `history[].vcg` | Standardized residual (z-score) for that date |
+| **VCG div** | `history[].vcg_div` | Panic-adjusted VCG for that date |
+| **β₁** | `history[].beta1` | Rolling 21-day β₁ (VVIX coefficient) as of that date |
+| **β₂** | `history[].beta2` | Rolling 21-day β₂ (VIX coefficient) as of that date |
+
+#### Model Parameters (fixed)
+
+| Parameter | Value | Why |
+|-----------|-------|-----|
+| OLS window | 21 trading days | One calendar month of data. Balances responsiveness (shorter = more reactive) vs stability (longer = less noisy). |
+| Z-score window | 63 trading days | Three calendar months. Longer than the OLS window for more stable standardization thresholds. |
+| VCG trigger | > 2σ | Two standard deviations — ~2.3% probability under normality. Conservative enough to avoid frequent false positives. |
+| VVIX threshold | 110 | Empirical level above which vol-of-vol indicates elevated hedging demand. Below 110, the vol complex is not stressed enough for a meaningful divergence. |
+| Credit 5d threshold | -0.5% | If credit has already dropped more than 0.5% in a week, the catch-up is underway and the "artificially calm" premise fails. |
+| VIX panic threshold | 40-48 | Rule-of-16: VIX 48 ≈ 3% daily equity moves. The transition from growth scare to liquidity panic where divergence signals lose predictive power. |
+
+Full mathematical specification: [`VCG_institutional_research_note.md`](VCG_institutional_research_note.md)
+
+---
+
 ## Strategy Interaction
 
 These strategies can be combined:
@@ -463,6 +690,12 @@ These strategies can be combined:
 6. **Flow → Risk Reversal**: If dark pool flow shows sustained accumulation AND put skew is steep, a risk reversal exploits both the informational edge (flow) and structural edge (skew) simultaneously.
 
 7. **Risk Reversal → Free Trade**: If the underlying rallies and the call appreciates, the short put can be closed for pennies — making the call effectively free (see free trade analyzer).
+
+8. **VCG → Portfolio-wide hedge**: When VCG signals risk-off, it overrides position-level sizing — reduce credit beta across the book, preserve downside hedges, and add HYG puts as portfolio overlay.
+
+9. **VCG + Flow**: If VCG signals risk-off AND dark pool flow shows distribution in credit-sensitive names, the combined signal strengthens conviction for defensive positioning.
+
+10. **VCG → LEAP defense**: When VCG is elevated, avoid initiating new LEAP positions in credit-sensitive sectors. Existing LEAPs in those sectors should have stops tightened.
 
 ---
 

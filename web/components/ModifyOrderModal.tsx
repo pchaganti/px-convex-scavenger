@@ -12,7 +12,7 @@ type ModifyOrderModalProps = {
   loading: boolean;
   prices?: Record<string, PriceData>;
   portfolio?: PortfolioData | null;
-  onConfirm: (newPrice: number) => void;
+  onConfirm: (newPrice: number, outsideRth?: boolean) => void;
   onClose: () => void;
 };
 
@@ -96,6 +96,7 @@ function resolveOrderPriceData(
 
 export default function ModifyOrderModal({ order, loading, prices, portfolio, onConfirm, onClose }: ModifyOrderModalProps) {
   const [newPrice, setNewPrice] = useState("");
+  const [outsideRth, setOutsideRth] = useState(false);
 
   // Reset price only when a different order is selected (by permId), not on every re-render
   const orderPermId = order?.permId ?? null;
@@ -218,6 +219,17 @@ export default function ModifyOrderModal({ order, loading, prices, portfolio, on
             </button>
           </div>
 
+          {/* Extended hours toggle */}
+          <label className="modify-rth-toggle">
+            <input
+              type="checkbox"
+              checked={outsideRth}
+              onChange={(e) => setOutsideRth(e.target.checked)}
+            />
+            <span className="modify-rth-label">FILL OUTSIDE RTH</span>
+            <span className="modify-rth-hint">Pre-market &amp; after hours</span>
+          </label>
+
           {/* Change indicator */}
           {isValid && delta !== 0 && (
             <div className={`modify-delta ${delta > 0 ? "positive" : "negative"}`}>
@@ -231,7 +243,7 @@ export default function ModifyOrderModal({ order, loading, prices, portfolio, on
           <button className="btn-secondary" onClick={onClose} disabled={loading}>
             Cancel
           </button>
-          <button className="btn-primary" onClick={() => canSubmit && onConfirm(parsedNew)} disabled={!canSubmit}>
+          <button className="btn-primary" onClick={() => canSubmit && onConfirm(parsedNew, outsideRth || undefined)} disabled={!canSubmit}>
             {loading ? "Modifying..." : "Modify Order"}
           </button>
         </div>
