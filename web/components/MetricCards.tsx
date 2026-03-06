@@ -1,6 +1,11 @@
+"use client";
+
+import { useState } from "react";
 import type { PortfolioData, PortfolioPosition, AccountSummary } from "@/lib/types";
 import type { PriceData } from "@/lib/pricesProtocol";
 import { legPriceKey } from "@/lib/positionUtils";
+import { computeExposureDetailed, type ExposureDataWithBreakdown } from "@/lib/exposureBreakdown";
+import ExposureBreakdownModal, { type ExposureMetric } from "./ExposureBreakdownModal";
 
 type MetricCardsProps = {
   portfolio: PortfolioData | null;
@@ -24,105 +29,6 @@ const fmtSignedExact = (n: number) =>
   `${n >= 0 ? "+" : "-"}${fmtExact(n)}`;
 
 const tone = (n: number) => (n > 0 ? "positive" as const : n < 0 ? "negative" as const : "neutral" as const);
-
-/* ─── Delta approximation from moneyness ─────────────────── */
-
-function approxDelta(spot: number, strike: number, dte: number, type: "Call" | "Put"): number {
-  if (spot <= 0 || strike <= 0 || dte <= 0) return type === "Call" ? 0.5 : -0.5;
-  const moneyness = type === "Call"
-    ? (spot - strike) / strike
-    : (strike - spot) / strike;
-  const timeFactor = Math.max(0.1, Math.sqrt(dte / 365));
-  const adjusted = moneyness / (0.2 * timeFactor);
-  const callDelta = 0.5 + 0.5 * Math.tanh(adjusted * 2);
-  return type === "Call" ? callDelta : callDelta - 1;
-}
-
-function daysToExpiry(expiry: string): number {
-  if (!expiry || expiry === "N/A") return 0;
-  const exp = new Date(expiry + "T16:00:00-05:00"); // 4pm ET
-  const now = new Date();
-  return Math.max(0, Math.ceil((exp.getTime() - now.getTime()) / 86_400_000));
-}
-
-function positionDelta(pos: PortfolioPosition, prices: Record<string, PriceData>): number {
-  let totalDelta = 0;
-  for (const leg of pos.legs) {
-    const sign = leg.direction === "LONG" ? 1 : -1;
-    if (leg.type === "Stock") {
-      totalDelta += sign * leg.contracts;
-      continue;
-    }
-    const key = legPriceKey(pos.ticker, pos.expiry, leg);
-    const lp = key ? prices[key] : null;
-
-    // Prefer IB real delta
-    if (lp?.delta != null) {
-      totalDelta += sign * lp.delta * leg.contracts * 100;
-      continue;
-    }
-
-    // Fallback: approximate delta
-    const spot = prices[pos.ticker]?.last;
-    if (!spot || spot <= 0 || !leg.strike) continue;
-    const dte = daysToExpiry(pos.expiry);
-    const rawDelta = approxDelta(spot, leg.strike, dte, leg.type);
-    totalDelta += sign * rawDelta * leg.contracts * 100;
-  }
-  return totalDelta;
-}
-
-type ExposureData = {
-  netLong: number;
-  netShort: number;
-  dollarDelta: number;
-  netExposurePct: number;
-};
-
-function computeExposure(
-  portfolio: PortfolioData,
-  prices: Record<string, PriceData>,
-): ExposureData {
-  let netLong = 0;
-  let netShort = 0;
-  let dollarDelta = 0;
-
-  for (const pos of portfolio.positions) {
-    const delta = positionDelta(pos, prices);
-    const spot = prices[pos.ticker]?.last;
-
-    // Dollar delta: delta × spot for each position
-    // For stocks, delta IS share count, so dollar delta = delta × spot
-    // For options, positionDelta returns equivalent shares, so dollar delta = delta × spot
-    if (spot && spot > 0) {
-      dollarDelta += delta * spot;
-    }
-
-    // Classify by delta sign for net long/short
-    let mv = 0;
-    if (pos.structure_type === "Stock") {
-      const p = prices[pos.ticker];
-      if (p?.last && p.last > 0) mv = Math.abs(p.last * pos.contracts);
-      else if (pos.market_value != null) mv = Math.abs(pos.market_value);
-    } else {
-      if (pos.market_value != null) {
-        mv = Math.abs(pos.market_value);
-      } else {
-        const legMv = pos.legs.reduce((s, l) => s + Math.abs(l.market_value ?? 0), 0);
-        if (legMv > 0) mv = legMv;
-      }
-    }
-
-    if (delta > 0) netLong += mv;
-    else if (delta < 0) netShort += mv;
-  }
-
-  const netExposurePct = portfolio.bankroll > 0
-    ? ((netLong - netShort) / portfolio.bankroll) * 100
-    : 0;
-
-  return { netLong, netShort, dollarDelta, netExposurePct };
-}
 
 function resolveMarketValue(pos: PortfolioData["positions"][number]): number | null {
   if (pos.market_value != null) return pos.market_value;
@@ -185,9 +91,9 @@ function computeTodayUnrealizedPnl(
 
 type CardDef = { label: string; value: string; change: string; tone: "positive" | "negative" | "neutral" };
 
-function MetricCard({ card }: { card: CardDef }) {
+function MetricCard({ card, onClick }: { card: CardDef; onClick?: () => void }) {
   return (
-    <div className="metric-card">
+    <div className={`metric-card${onClick ? " metric-card-clickable" : ""}`} onClick={onClick}>
       <div className="metric-label">{card.label}</div>
       <div className={`metric-value ${card.tone !== "neutral" ? card.tone : ""}`}>{card.value}</div>
       <div className={`metric-change ${card.tone}`}>{card.change}</div>
@@ -202,7 +108,7 @@ function AccountRow({ acct }: { acct: AccountSummary }) {
   const cards: CardDef[] = [
     { label: "Net Liquidation", value: fmtExact(acct.net_liquidation), change: "BANKROLL", tone: "neutral" },
     { label: "Day P&L", value: dailyAvailable ? fmtSignedExact(acct.daily_pnl!) : "---", change: dailyAvailable ? "TODAY" : "MARKET CLOSED", tone: dailyAvailable ? tone(acct.daily_pnl!) : "neutral" },
-    { label: "Unrealized P&L", value: fmtSignedExact(acct.unrealized_pnl), change: "OPEN POSITIONS", tone: tone(acct.unrealized_pnl) },
+    { label: "Unrealized P&L", value: fmtSignedExact(acct.unrealized_pnl), change: "OPEN POSITIONS", tone: acct.unrealized_pnl !== 0 ? tone(acct.unrealized_pnl) : "neutral" },
     { label: "Realized P&L", value: fmtSignedExact(acct.realized_pnl), change: "CLOSED TODAY", tone: tone(acct.realized_pnl) },
     { label: "Dividends", value: fmtExact(acct.dividends), change: "ACCRUED", tone: acct.dividends > 0 ? "positive" : "neutral" },
   ];
@@ -237,28 +143,46 @@ function RiskRow({ acct }: { acct: AccountSummary }) {
   );
 }
 
-/* ─── Exposure row (real-time computed) ──────────────────── */
+/* ─── Exposure row (real-time computed, clickable) ────────── */
 
-function ExposureRow({ exposure }: { exposure: ExposureData | null }) {
+function ExposureRow({
+  exposure,
+  onCardClick,
+}: {
+  exposure: ExposureDataWithBreakdown | null;
+  onCardClick: (metric: ExposureMetric) => void;
+}) {
   return (
     <>
       <div className="section-label-mono">EXPOSURE</div>
       {exposure ? (
         <div className="metrics-grid">
-          <MetricCard card={{ label: "Net Long", value: fmt(exposure.netLong), change: "LONG BIASED", tone: "positive" }} />
-          <MetricCard card={{ label: "Net Short", value: fmt(exposure.netShort), change: "SHORT BIASED", tone: "negative" }} />
-          <MetricCard card={{
-            label: "Dollar Delta",
-            value: fmtSigned(exposure.dollarDelta),
-            change: "NOTIONAL EXPOSURE",
-            tone: tone(exposure.dollarDelta),
-          }} />
-          <MetricCard card={{
-            label: "Net Exposure",
-            value: `${exposure.netExposurePct >= 0 ? "+" : ""}${exposure.netExposurePct.toFixed(1)}%`,
-            change: "OF BANKROLL",
-            tone: tone(exposure.netExposurePct),
-          }} />
+          <MetricCard
+            card={{ label: "Net Long", value: fmt(exposure.netLong), change: "LONG BIASED", tone: "positive" }}
+            onClick={() => onCardClick("netLong")}
+          />
+          <MetricCard
+            card={{ label: "Net Short", value: fmt(exposure.netShort), change: "SHORT BIASED", tone: "negative" }}
+            onClick={() => onCardClick("netShort")}
+          />
+          <MetricCard
+            card={{
+              label: "Dollar Delta",
+              value: fmtSigned(exposure.dollarDelta),
+              change: "NOTIONAL EXPOSURE",
+              tone: tone(exposure.dollarDelta),
+            }}
+            onClick={() => onCardClick("dollarDelta")}
+          />
+          <MetricCard
+            card={{
+              label: "Net Exposure",
+              value: `${exposure.netExposurePct >= 0 ? "+" : ""}${exposure.netExposurePct.toFixed(1)}%`,
+              change: "OF BANKROLL",
+              tone: tone(exposure.netExposurePct),
+            }}
+            onClick={() => onCardClick("netExposure")}
+          />
         </div>
       ) : (
         <div className="metrics-grid">
@@ -367,6 +291,8 @@ function LegacyLeverageRow({ portfolio, pnl, pnlPct }: { portfolio: PortfolioDat
 /* ─── Main component ─────────────────────────────────────── */
 
 export default function MetricCards({ portfolio, prices, realizedPnl, section }: MetricCardsProps) {
+  const [activeMetric, setActiveMetric] = useState<ExposureMetric | null>(null);
+
   const isPortfolio = section === "portfolio";
   if (!portfolio) {
     if (!isPortfolio) return null;
@@ -392,9 +318,9 @@ export default function MetricCards({ portfolio, prices, realizedPnl, section }:
     ? (pnl / portfolio.total_deployed_dollars) * 100
     : 0;
 
-  // Exposure computation
+  // Exposure computation (detailed, with breakdown rows)
   const hasPrices = prices && Object.keys(prices).length > 0;
-  const exposure = hasPrices ? computeExposure(portfolio, prices) : null;
+  const exposure = hasPrices ? computeExposureDetailed(portfolio, prices) : null;
 
   // Today's P&L computation
   const todayUnrealized = hasPrices
@@ -417,8 +343,8 @@ export default function MetricCards({ portfolio, prices, realizedPnl, section }:
       {/* Row 2: RISK (only when account_summary present) */}
       {acct && <RiskRow acct={acct} />}
 
-      {/* Row 3: EXPOSURE (real-time computed) */}
-      <ExposureRow exposure={exposure} />
+      {/* Row 3: EXPOSURE (real-time computed, clickable) */}
+      <ExposureRow exposure={exposure} onCardClick={setActiveMetric} />
 
       {/* Row 4: TODAY'S P&L (WS real-time) */}
       <TodayPnlRow
@@ -429,6 +355,16 @@ export default function MetricCards({ portfolio, prices, realizedPnl, section }:
         total={total}
         realizedPnl={realizedPnl}
       />
+
+      {/* Exposure breakdown modal */}
+      {exposure && (
+        <ExposureBreakdownModal
+          metric={activeMetric}
+          exposure={exposure}
+          bankroll={portfolio.bankroll}
+          onClose={() => setActiveMetric(null)}
+        />
+      )}
     </>
   );
 }
