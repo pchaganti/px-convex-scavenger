@@ -6,7 +6,8 @@ import type { OrdersData, PortfolioData } from "@/lib/types";
 
 type TickerDetailContextValue = {
   activeTicker: string | null;
-  openTicker: (ticker: string) => void;
+  activePositionId: number | null;
+  openTicker: (ticker: string, positionId?: number) => void;
   closeTicker: () => void;
   getPrices: () => Record<string, PriceData>;
   getPortfolio: () => PortfolioData | null;
@@ -20,16 +21,19 @@ const TickerDetailContext = createContext<TickerDetailContextValue | null>(null)
 
 export function TickerDetailProvider({ children }: { children: ReactNode }) {
   const [activeTicker, setActiveTicker] = useState<string | null>(null);
+  const [activePositionId, setActivePositionId] = useState<number | null>(null);
   const pricesRef = useRef<Record<string, PriceData>>({});
   const portfolioRef = useRef<PortfolioData | null>(null);
   const ordersRef = useRef<OrdersData | null>(null);
 
-  const openTicker = useCallback((ticker: string) => {
+  const openTicker = useCallback((ticker: string, positionId?: number) => {
     setActiveTicker(ticker.toUpperCase());
+    setActivePositionId(positionId ?? null);
   }, []);
 
   const closeTicker = useCallback(() => {
     setActiveTicker(null);
+    setActivePositionId(null);
   }, []);
 
   const getPrices = useCallback(() => pricesRef.current, []);
@@ -50,7 +54,7 @@ export function TickerDetailProvider({ children }: { children: ReactNode }) {
 
   return (
     <TickerDetailContext.Provider
-      value={{ activeTicker, openTicker, closeTicker, getPrices, getPortfolio, getOrders, setPrices, setPortfolio, setOrders }}
+      value={{ activeTicker, activePositionId, openTicker, closeTicker, getPrices, getPortfolio, getOrders, setPrices, setPortfolio, setOrders }}
     >
       {children}
     </TickerDetailContext.Provider>

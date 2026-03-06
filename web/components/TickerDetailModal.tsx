@@ -109,7 +109,7 @@ function resolvePriceBar(
 }
 
 export default function TickerDetailModal() {
-  const { activeTicker, closeTicker, getPrices, getPortfolio, getOrders } = useTickerDetail();
+  const { activeTicker, activePositionId, closeTicker, getPrices, getPortfolio, getOrders } = useTickerDetail();
   const [activeTab, setActiveTab] = useState<TabId | null>(null);
 
   const prices = getPrices();
@@ -118,8 +118,12 @@ export default function TickerDetailModal() {
 
   const position: PortfolioPosition | null = useMemo(() => {
     if (!activeTicker || !portfolio) return null;
+    // If a specific position ID was provided (e.g. duplicate tickers), use it
+    if (activePositionId != null) {
+      return portfolio.positions.find((p) => p.id === activePositionId) ?? null;
+    }
     return portfolio.positions.find((p) => p.ticker === activeTicker) ?? null;
-  }, [activeTicker, portfolio]);
+  }, [activeTicker, activePositionId, portfolio]);
 
   // Find open orders for this ticker
   const tickerOrders: OpenOrder[] = useMemo(() => {

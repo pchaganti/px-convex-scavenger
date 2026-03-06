@@ -34,12 +34,12 @@ import ModifyOrderModal from "./ModifyOrderModal";
 
 /* ─── Ticker link (clickable) ──────────────────────────── */
 
-function TickerLink({ ticker }: { ticker: string }) {
+function TickerLink({ ticker, positionId }: { ticker: string; positionId?: number }) {
   const { openTicker } = useTickerDetail();
   return (
     <button
       className="ticker-link"
-      onClick={() => openTicker(ticker)}
+      onClick={() => openTicker(ticker, positionId)}
       aria-label={`View details for ${ticker}`}
     >
       {ticker}
@@ -490,10 +490,10 @@ function PositionRow({ pos, showExpiry = true, showStrike = false, showUnderlyin
               >
                 {legsExpanded ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
               </button>
-              <TickerLink ticker={pos.ticker} />
+              <TickerLink ticker={pos.ticker} positionId={pos.id} />
             </span>
           ) : (
-            <TickerLink ticker={pos.ticker} />
+            <TickerLink ticker={pos.ticker} positionId={pos.id} />
           )}
         </td>
         <td>{structureDisplay}</td>
