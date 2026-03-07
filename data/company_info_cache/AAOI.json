@@ -1,0 +1,29 @@
+{
+  "ticker": "AAOI",
+  "profile_expires": null,
+  "stats_expires": "2026-03-07T20:17:19.777Z",
+  "uw_info": {},
+  "stock_state": {
+    "close": "98.5951",
+    "high": "114.63",
+    "low": "97.24",
+    "open": "98",
+    "volume": 12042538,
+    "tape_time": "2026-03-06T20:23:28Z",
+    "market_time": "regular",
+    "total_volume": 12427094,
+    "prev_close": "97.5"
+  },
+  "exa_profile": {
+    "ceo": "Chih Hsiang Lin",
+    "employees": "3,309",
+    "headquarters": "Sugar Land, Texas",
+    "founded": "1997"
+  },
+  "exa_stats": {
+    "pe_ratio": "-10.85",
+    "week_52_high": 52,
+    "week_52_low": 9.71
+  },
+  "fetched_at": "2026-03-06T20:17:19.777Z"
+}
