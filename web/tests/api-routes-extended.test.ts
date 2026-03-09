@@ -904,6 +904,218 @@ describe("POST /api/orders/place — extended", () => {
 });
 
 // =============================================================================
+// 6b. POST /api/orders/place — silent IB rejection (SPXU combo bug)
+// =============================================================================
+
+describe("POST /api/orders/place — silent IB rejection states", () => {
+  const SPXU_COMBO_BODY = {
+    type: "combo",
+    symbol: "SPXU",
+    action: "SELL",
+    quantity: 20,
+    limitPrice: 2.25,
+    tif: "GTC",
+    legs: [
+      { expiry: "20260313", strike: 53, right: "C", action: "SELL", ratio: 1 },
+      { expiry: "20260313", strike: 60, right: "C", action: "BUY", ratio: 1 },
+    ],
+  };
+
+  beforeEach(() => {
+    vi.resetModules();
+    mockRunScript.mockReset();
+    mockIbOrders.mockReset();
+    mockReadDataFile.mockReset();
+    mockIbOrders.mockResolvedValue({ ok: true, stderr: "" });
+    mockReadDataFile.mockResolvedValue({
+      ok: true,
+      data: { open_orders: [], executed_orders: [], open_count: 0, executed_count: 0 },
+    });
+  });
+
+  it("returns 502 when IB silently cancels the order (Cancelled status)", async () => {
+    mockRunScript.mockResolvedValue({
+      ok: true,
+      data: {
+        status: "ok",
+        orderId: 12345,
+        permId: 67890,
+        initialStatus: "Cancelled",
+        message: "SELL 20 SPXU @ $2.25 — Cancelled",
+      },
+    });
+
+    const { POST } = await import("../app/api/orders/place/route");
+    const res = await POST(
+      new Request("http://localhost/api/orders/place", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(SPXU_COMBO_BODY),
+      }),
+    );
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.error).toMatch(/Cancelled/i);
+  });
+
+  it("returns 502 when IB reports ApiCancelled", async () => {
+    mockRunScript.mockResolvedValue({
+      ok: true,
+      data: {
+        status: "ok",
+        orderId: 12345,
+        permId: 67890,
+        initialStatus: "ApiCancelled",
+        message: "SELL 20 SPXU @ $2.25 — ApiCancelled",
+      },
+    });
+
+    const { POST } = await import("../app/api/orders/place/route");
+    const res = await POST(
+      new Request("http://localhost/api/orders/place", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(SPXU_COMBO_BODY),
+      }),
+    );
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.error).toMatch(/ApiCancelled/i);
+  });
+
+  it("returns 502 when IB returns Unknown (no ack before disconnect)", async () => {
+    mockRunScript.mockResolvedValue({
+      ok: true,
+      data: {
+        status: "ok",
+        orderId: 0,
+        permId: 0,
+        initialStatus: "Unknown",
+        message: "SELL 20 SPXU @ $2.25 — Unknown",
+      },
+    });
+
+    const { POST } = await import("../app/api/orders/place/route");
+    const res = await POST(
+      new Request("http://localhost/api/orders/place", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(SPXU_COMBO_BODY),
+      }),
+    );
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.error).toMatch(/Unknown|no acknowledgement/i);
+  });
+
+  it("returns 502 when IB returns Inactive", async () => {
+    mockRunScript.mockResolvedValue({
+      ok: true,
+      data: {
+        status: "ok",
+        orderId: 12345,
+        permId: 67890,
+        initialStatus: "Inactive",
+        message: "SELL 20 SPXU @ $2.25 — Inactive",
+      },
+    });
+
+    const { POST } = await import("../app/api/orders/place/route");
+    const res = await POST(
+      new Request("http://localhost/api/orders/place", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(SPXU_COMBO_BODY),
+      }),
+    );
+    expect(res.status).toBe(502);
+    const body = await res.json();
+    expect(body.error).toMatch(/Inactive/i);
+  });
+
+  it("returns 200 when IB accepts the combo order (Submitted)", async () => {
+    mockRunScript.mockResolvedValue({
+      ok: true,
+      data: {
+        status: "ok",
+        orderId: 12345,
+        permId: 67890,
+        initialStatus: "Submitted",
+        message: "SELL 20 SPXU @ $2.25 — Submitted",
+      },
+    });
+
+    const { POST } = await import("../app/api/orders/place/route");
+    const res = await POST(
+      new Request("http://localhost/api/orders/place", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(SPXU_COMBO_BODY),
+      }),
+    );
+    expect(res.status).toBe(200);
+    const body = await res.json();
+    expect(body.status).toBe("ok");
+    expect(body.initialStatus).toBe("Submitted");
+  });
+
+  it("returns 200 when IB accepts the combo order (PreSubmitted)", async () => {
+    mockRunScript.mockResolvedValue({
+      ok: true,
+      data: {
+        status: "ok",
+        orderId: 12345,
+        permId: 67890,
+        initialStatus: "PreSubmitted",
+        message: "SELL 20 SPXU @ $2.25 — PreSubmitted",
+      },
+    });
+
+    const { POST } = await import("../app/api/orders/place/route");
+    const res = await POST(
+      new Request("http://localhost/api/orders/place", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(SPXU_COMBO_BODY),
+      }),
+    );
+    expect(res.status).toBe(200);
+  });
+
+  it("passes combo legs to ib_place_order.py correctly", async () => {
+    mockRunScript.mockResolvedValue({
+      ok: true,
+      data: {
+        status: "ok",
+        orderId: 12345,
+        permId: 67890,
+        initialStatus: "Submitted",
+        message: "ok",
+      },
+    });
+
+    const { POST } = await import("../app/api/orders/place/route");
+    await POST(
+      new Request("http://localhost/api/orders/place", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(SPXU_COMBO_BODY),
+      }),
+    );
+
+    const callArgs = mockRunScript.mock.calls[0][1].args as string[];
+    const jsonArg = callArgs[callArgs.indexOf("--json") + 1];
+    const parsed = JSON.parse(jsonArg);
+    expect(parsed.type).toBe("combo");
+    expect(parsed.symbol).toBe("SPXU");
+    expect(parsed.legs).toHaveLength(2);
+    expect(parsed.legs[0].strike).toBe(53);
+    expect(parsed.legs[1].strike).toBe(60);
+    expect(parsed.legs[0].right).toBe("C");
+  });
+});
+
+// =============================================================================
 // 7. GET /api/ticker/ratings — mocked runScript
 // =============================================================================
 

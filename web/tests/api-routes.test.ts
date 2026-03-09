@@ -55,16 +55,26 @@ vi.mock("@/lib/syncMutex", () => ({
   createSyncMutex: (fn: () => Promise<unknown>) => fn,
 }));
 
-// Mock fs/promises for blotter + journal routes
+// Mock fs/promises for blotter + journal + portfolio routes
 const mockReadFile = vi.fn();
+// Default stat: mtime 5 s ago (fresh) so portfolio GET doesn't trigger background spawn
+const mockStat = vi.fn().mockResolvedValue({ mtimeMs: Date.now() - 5_000 });
 vi.mock("fs/promises", () => ({
   readFile: mockReadFile,
   writeFile: vi.fn().mockResolvedValue(undefined),
+  stat: mockStat,
 }));
 
-// Mock child_process for blotter POST (spawn)
+// Mock child_process — spawn returns a minimal stub so portfolio route doesn't crash
+// when the background sync is triggered (e.g. if stat is mocked stale in a specific test).
+const spawnStub = {
+  stdout: { on: vi.fn() },
+  stderr: { on: vi.fn() },
+  on: vi.fn(),
+  unref: vi.fn(),
+};
 vi.mock("child_process", () => ({
-  spawn: vi.fn(),
+  spawn: vi.fn().mockReturnValue(spawnStub),
 }));
 
 // Mock global fetch for routes that call external APIs directly
