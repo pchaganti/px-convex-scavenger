@@ -1,44 +1,14 @@
 {
   "ticker": "ILF",
   "profile_expires": null,
-  "stats_expires": "2026-03-07T23:08:43.389Z",
-  "uw_info": {
-    "symbol": "ILF",
-    "logo": "https://storage.googleapis.com/uwassets/logos/ILF.png",
-    "beta": "0.6808",
-    "full_name": "ISHARES LATIN AMERICA 40 ETF",
-    "sector": null,
-    "has_options": true,
-    "marketcap_size": "mid",
-    "outstanding": "120500000",
-    "announce_time": null,
-    "issue_type": "ETF",
-    "marketcap": "4116869727",
-    "next_earnings_date": null,
-    "uw_tags": [],
-    "avg30_volume": "4983157.428571428571",
-    "short_name": "ISHARES LATIN AMERICA 40 ETF",
-    "short_description": "",
-    "has_investment_arm": false,
-    "has_dividend": true,
-    "has_earnings_history": false
-  },
-  "stock_state": {
-    "close": "33.69",
-    "high": "33.87",
-    "low": "33.69",
-    "open": "33.87",
-    "volume": 36967,
-    "market_time": "postmarket",
-    "tape_time": "2026-03-06T22:47:06Z",
-    "total_volume": 5024152,
-    "prev_close": "33.81"
-  },
+  "stats_expires": "2026-03-10T15:32:28.546Z",
+  "uw_info": {},
+  "stock_state": {},
   "exa_profile": {},
   "exa_stats": {
     "pe_ratio": "13.39",
     "week_52_high": 52,
     "week_52_low": 20.97
   },
-  "fetched_at": "2026-03-06T23:08:43.389Z"
+  "fetched_at": "2026-03-09T15:32:28.546Z"
 }

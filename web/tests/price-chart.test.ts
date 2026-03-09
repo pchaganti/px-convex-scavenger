@@ -82,6 +82,13 @@ test("nextMockPrice never goes below 90% or above 110% of current", () => {
   expect(high).toBeLessThanOrEqual(110 + 0.01);
 });
 
+// ILF base price must reflect current market (~$33-35), not the stale $22
+test("getBasePrice for ILF is above $30 (iShares Latin America 40 ETF, ~$33.82)", () => {
+  const price = getBasePrice("ILF");
+  expect(price).toBeGreaterThan(30);
+  expect(price).toBeLessThan(50);
+});
+
 test("each LivelinePoint has time and value as numbers", () => {
   const pts = generateMockHistory(150, 10);
   for (const pt of pts) {

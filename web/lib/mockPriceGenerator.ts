@@ -15,7 +15,7 @@ function mulberry32(seed: number) {
 const BASE_PRICES: Record<string, number> = {
   AAPL: 270, GOOG: 185, GOOGL: 185, AMZN: 225, MSFT: 450,
   META: 620, NVDA: 140, TSLA: 340, AMD: 175, SPY: 595,
-  QQQ: 525, IWM: 220, AAOI: 35, ILF: 22, NET: 120,
+  QQQ: 525, IWM: 220, AAOI: 35, ILF: 34, NET: 120,
   PLTR: 115, COIN: 260, MSTR: 370, UBER: 85, CRWD: 380,
 };
 
