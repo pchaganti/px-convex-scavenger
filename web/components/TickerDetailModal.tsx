@@ -111,7 +111,7 @@ function resolvePriceBar(
   return { priceData: prices[ticker] ?? null, label: `${ticker} (underlying)` };
 }
 
-export default function TickerDetailModal() {
+export default function TickerDetailModal({ theme = "dark" }: { theme?: "dark" | "light" }) {
   const { activeTicker, activePositionId, closeTicker, getPrices, getPortfolio, getOrders } = useTickerDetail();
   const [activeTab, setActiveTab] = useState<TabId | null>(null);
 
@@ -177,7 +177,7 @@ export default function TickerDetailModal() {
         <PriceBar priceData={priceData} label={priceLabel} />
 
         {/* Price chart */}
-        <PriceChart ticker={activeTicker} prices={prices} priceKey={chartPriceKey} />
+        <PriceChart ticker={activeTicker} prices={prices} priceKey={chartPriceKey} theme={theme} />
 
         {/* Tab bar */}
         <div className="ticker-tabs">
@@ -204,6 +204,7 @@ export default function TickerDetailModal() {
             <OrderTab
               ticker={activeTicker}
               position={position}
+              portfolio={portfolio}
               prices={prices}
               openOrders={tickerOrders}
               tickerPriceData={priceData}

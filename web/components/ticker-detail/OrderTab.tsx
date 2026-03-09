@@ -1,16 +1,18 @@
 "use client";
 
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import { Loader2 } from "lucide-react";
-import type { OpenOrder, PortfolioPosition } from "@/lib/types";
+import type { OpenOrder, PortfolioData, PortfolioPosition } from "@/lib/types";
 import type { PriceData } from "@/lib/pricesProtocol";
 import { optionKey } from "@/lib/pricesProtocol";
 import { useOrderActions } from "@/lib/OrderActionsContext";
 import { fmtPrice, legPriceKey } from "@/lib/positionUtils";
+import ModifyOrderModal from "@/components/ModifyOrderModal";
 
 type OrderTabProps = {
   ticker: string;
   position: PortfolioPosition | null;
+  portfolio?: PortfolioData | null;
   prices: Record<string, PriceData>;
   openOrders?: OpenOrder[];
   /** Resolved price data (option-level for single-leg options, underlying otherwise) */
@@ -42,13 +44,13 @@ function resolveOrderPriceData(order: OpenOrder, prices: Record<string, PriceDat
 function ExistingOrderRow({
   order,
   prices,
+  onModify,
 }: {
   order: OpenOrder;
   prices: Record<string, PriceData>;
+  onModify: (order: OpenOrder) => void;
 }) {
-  const { pendingCancels, pendingModifies, requestCancel, requestModify } = useOrderActions();
-  const [modifying, setModifying] = useState(false);
-  const [newPrice, setNewPrice] = useState("");
+  const { pendingCancels, pendingModifies, requestCancel } = useOrderActions();
   const [actionLoading, setActionLoading] = useState(false);
 
   const isPendingCancel = pendingCancels.has(order.permId);
@@ -56,35 +58,13 @@ function ExistingOrderRow({
   const isPending = isPendingCancel || isPendingModify;
 
   const priceData = resolveOrderPriceData(order, prices);
-  const bid = priceData?.bid ?? null;
-  const ask = priceData?.ask ?? null;
-  const mid = bid != null && ask != null ? (bid + ask) / 2 : null;
   const canModify = order.orderType === "LMT" || order.orderType === "STP LMT";
-
-  // Reset modify form when opening
-  useEffect(() => {
-    if (modifying && order.limitPrice != null) {
-      setNewPrice(order.limitPrice.toFixed(2));
-    }
-  }, [modifying, order.limitPrice]);
 
   const handleCancel = useCallback(async () => {
     setActionLoading(true);
     await requestCancel(order);
     setActionLoading(false);
   }, [order, requestCancel]);
-
-  const handleModify = useCallback(async () => {
-    const parsed = parseFloat(newPrice);
-    if (isNaN(parsed) || parsed <= 0) return;
-    setActionLoading(true);
-    await requestModify(order, parsed);
-    setActionLoading(false);
-    setModifying(false);
-  }, [order, newPrice, requestModify]);
-
-  const parsedNew = parseFloat(newPrice);
-  const isValidModify = !isNaN(parsedNew) && parsedNew > 0 && order.limitPrice != null && Math.abs(parsedNew - order.limitPrice) >= 0.005;
 
   // Contract description
   const c = order.contract;
@@ -129,46 +109,14 @@ function ExistingOrderRow({
         </div>
       </div>
 
-      {/* Modify form (inline) */}
-      {modifying && (
-        <div className="existing-order-modify">
-          <div className="modify-price-section">
-            <label className="modify-price-label">New Limit Price</label>
-            <div className="modify-price-input-row">
-              <span className="modify-price-prefix">$</span>
-              <input
-                className="modify-price-input"
-                type="number"
-                step="0.01"
-                min="0.01"
-                value={newPrice}
-                onChange={(e) => setNewPrice(e.target.value)}
-                autoFocus
-              />
-            </div>
-            <div className="modify-quick-buttons">
-              <button className="btn-quick" disabled={bid == null} onClick={() => bid != null && setNewPrice(bid.toFixed(2))}>BID</button>
-              <button className="btn-quick" disabled={mid == null} onClick={() => mid != null && setNewPrice(mid.toFixed(2))}>MID</button>
-              <button className="btn-quick" disabled={ask == null} onClick={() => ask != null && setNewPrice(ask.toFixed(2))}>ASK</button>
-            </div>
-          </div>
-          <div className="modify-actions">
-            <button className="btn-secondary" onClick={() => setModifying(false)} disabled={actionLoading}>Cancel</button>
-            <button className="btn-primary" onClick={handleModify} disabled={!isValidModify || actionLoading}>
-              {actionLoading ? "Modifying..." : "Modify Order"}
-            </button>
-          </div>
-        </div>
-      )}
-
       {/* Action buttons */}
-      {!modifying && !isPending && (
+      {!isPending && (
         <div className="existing-order-actions">
           <button
             className="btn-order-action btn-modify"
             disabled={!canModify}
             title={canModify ? "Modify limit price" : "Only LMT orders can be modified"}
-            onClick={() => setModifying(true)}
+            onClick={() => onModify(order)}
           >
             MODIFY
           </button>
@@ -585,36 +533,59 @@ function ComboOrderForm({
 
 /* ─── Main OrderTab ─── */
 
-export default function OrderTab({ ticker, position, prices, openOrders = [], tickerPriceData }: OrderTabProps) {
+export default function OrderTab({ ticker, position, portfolio, prices, openOrders = [], tickerPriceData }: OrderTabProps) {
   const isCombo = position != null && position.legs.length > 1 && position.structure_type !== "Stock";
 
+  const { requestModify } = useOrderActions();
+  const [modifyTarget, setModifyTarget] = useState<OpenOrder | null>(null);
+  const [modifyLoading, setModifyLoading] = useState(false);
+
+  const handleModifyConfirm = useCallback(async (newPrice: number, outsideRth?: boolean) => {
+    if (!modifyTarget) return;
+    setModifyLoading(true);
+    await requestModify(modifyTarget, newPrice, outsideRth);
+    setModifyLoading(false);
+    setModifyTarget(null);
+  }, [modifyTarget, requestModify]);
+
   return (
-    <div className="order-tab">
-      {/* Existing open orders for this ticker */}
-      {openOrders.length > 0 && (
-        <div className="existing-orders-section">
-          <div className="existing-orders-title">Open Orders</div>
-          {openOrders.map((o) => (
-            <ExistingOrderRow key={o.permId || o.orderId} order={o} prices={prices} />
-          ))}
-        </div>
-      )}
+    <>
+      <ModifyOrderModal
+        order={modifyTarget}
+        loading={modifyLoading}
+        prices={prices}
+        portfolio={portfolio}
+        onConfirm={handleModifyConfirm}
+        onClose={() => setModifyTarget(null)}
+      />
 
-      {/* Combo order form for multi-leg positions */}
-      {isCombo && (
-        <div className={openOrders.length > 0 ? "new-order-section" : ""}>
-          {openOrders.length > 0 && <div className="existing-orders-title">Combo Order</div>}
-          <ComboOrderForm ticker={ticker} position={position!} prices={prices} />
-        </div>
-      )}
+      <div className="order-tab">
+        {/* Existing open orders for this ticker */}
+        {openOrders.length > 0 && (
+          <div className="existing-orders-section">
+            <div className="existing-orders-title">Open Orders</div>
+            {openOrders.map((o) => (
+              <ExistingOrderRow key={o.permId || o.orderId} order={o} prices={prices} onModify={setModifyTarget} />
+            ))}
+          </div>
+        )}
 
-      {/* Stock / single-leg order form */}
-      {!isCombo && (
-        <div className={openOrders.length > 0 ? "new-order-section" : ""}>
-          {openOrders.length > 0 && <div className="existing-orders-title">New Order</div>}
-          <NewOrderForm ticker={ticker} position={position} tickerPriceData={tickerPriceData} />
-        </div>
-      )}
-    </div>
+        {/* Combo order form for multi-leg positions */}
+        {isCombo && (
+          <div className={openOrders.length > 0 ? "new-order-section" : ""}>
+            {openOrders.length > 0 && <div className="existing-orders-title">Combo Order</div>}
+            <ComboOrderForm ticker={ticker} position={position!} prices={prices} />
+          </div>
+        )}
+
+        {/* Stock / single-leg order form */}
+        {!isCombo && (
+          <div className={openOrders.length > 0 ? "new-order-section" : ""}>
+            {openOrders.length > 0 && <div className="existing-orders-title">New Order</div>}
+            <NewOrderForm ticker={ticker} position={position} tickerPriceData={tickerPriceData} />
+          </div>
+        )}
+      </div>
+    </>
   );
 }
