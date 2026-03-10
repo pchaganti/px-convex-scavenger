@@ -599,43 +599,58 @@ ${memoryContent}
     proc.unref();
   };
 
-  // Check X account scan status
+  // Check X account scan status — reads from data/x_accounts.json
   const checkXScanStatus = (cwd: string): { account: string; needsScan: boolean; lastScan: string | null; hoursSince: number | null }[] => {
-    const watchlistPath = path.join(cwd, "data/watchlist.json");
+    const accountsPath = path.join(cwd, "data/x_accounts.json");
     const results: { account: string; needsScan: boolean; lastScan: string | null; hoursSince: number | null }[] = [];
-    
-    if (!fs.existsSync(watchlistPath)) {
+
+    if (!fs.existsSync(accountsPath)) {
       return results;
     }
-    
+
     try {
-      const watchlist = JSON.parse(fs.readFileSync(watchlistPath, "utf-8"));
-      const subcategories = watchlist.subcategories || {};
-      
-      for (const [key, value] of Object.entries(subcategories)) {
-        if (key.startsWith("@")) {
-          const account = key.slice(1);
-          const lastScan = (value as any).last_scan || null;
-          
-          // Check if scan is needed (more than 12 hours old or never scanned)
-          let needsScan = !lastScan;
-          let hoursSince: number | null = null;
-          
-          if (lastScan) {
-            const lastScanDate = new Date(lastScan);
-            const now = new Date();
-            hoursSince = (now.getTime() - lastScanDate.getTime()) / (1000 * 60 * 60);
-            needsScan = hoursSince > 12;
-          }
-          
-          results.push({ account, needsScan, lastScan, hoursSince });
+      const data = JSON.parse(fs.readFileSync(accountsPath, "utf-8"));
+      const accounts = data.accounts || [];
+
+      for (const entry of accounts) {
+        if (!entry.username || entry.enabled === false) continue;
+
+        const account = entry.username;
+        const lastScan = entry.last_scan || null;
+
+        // Check if scan is needed (more than 12 hours old or never scanned)
+        let needsScan = !lastScan;
+        let hoursSince: number | null = null;
+
+        if (lastScan) {
+          const lastScanDate = new Date(lastScan);
+          const now = new Date();
+          hoursSince = (now.getTime() - lastScanDate.getTime()) / (1000 * 60 * 60);
+          needsScan = hoursSince > 12;
         }
+
+        results.push({ account, needsScan, lastScan, hoursSince });
       }
     } catch (e) {
       // Ignore parse errors
     }
-    
+
     return results;
+  };
+
+  // Update last_scan timestamp in x_accounts.json after successful scan
+  const updateXAccountLastScan = (cwd: string, account: string) => {
+    const accountsPath = path.join(cwd, "data/x_accounts.json");
+    try {
+      const data = JSON.parse(fs.readFileSync(accountsPath, "utf-8"));
+      const entry = (data.accounts || []).find((a: any) => a.username === account);
+      if (entry) {
+        entry.last_scan = new Date().toISOString();
+        fs.writeFileSync(accountsPath, JSON.stringify(data, null, 2));
+      }
+    } catch {
+      // Non-fatal
+    }
   };
 
   // Run X account scan asynchronously (non-blocking)
@@ -686,10 +701,13 @@ ${memoryContent}
           message += `, ${updatedTickers} updated`;
         }
         
+        // Update last_scan timestamp in x_accounts.json
+        updateXAccountLastScan(cwd, account);
         tracker.complete(processName, "success", message);
       } else {
         // Check if it's a parsing issue (still ran, just no tickers)
         if (output.includes("No posts with tickers") || output.includes("No tweets with tickers")) {
+          updateXAccountLastScan(cwd, account);
           tracker.complete(processName, "success", `@${account}: 0 tweets`);
         } else {
           tracker.complete(processName, "warning", `@${account}: scan incomplete`);
@@ -766,9 +784,14 @@ ${memoryContent}
     // Run CRI scan in parallel (pre-warm /regime page data)
     runCriScan(ctx.cwd, tracker);
 
-    // Run X account scans in parallel (independent of IB/free trade)
+    // Run X account scans — only scan stale accounts (>12h), report fresh ones immediately
     for (const scan of xScans) {
-      runXScan(ctx.cwd, scan.account, tracker);
+      if (scan.needsScan) {
+        runXScan(ctx.cwd, scan.account, tracker);
+      } else {
+        const ago = scan.hoursSince != null ? formatHoursAgo(scan.hoursSince) : "recently";
+        tracker.complete(`x_${scan.account}`, "success", `@${scan.account}: fresh (${ago})`);
+      }
     }
   });
 }

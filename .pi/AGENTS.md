@@ -653,11 +653,8 @@ Two methods to fetch tweets and extract ticker sentiment:
 Uses xAI's Grok with x_search tool for high-quality analysis.
 
 ```bash
-# Scan default account (@aleabitoreddit)
-python3 scripts/fetch_x_xai.py
-
-# Scan specific account
-python3 scripts/fetch_x_xai.py --account elonmusk
+# Scan an account
+python3 scripts/fetch_x_xai.py --account USERNAME
 
 # Look back 7 days
 python3 scripts/fetch_x_xai.py --days 7
@@ -1353,7 +1350,7 @@ When Pi starts, the startup extension (`.pi/extensions/startup-protocol.ts`) run
 [5/6] ✓ Free Trade Progress:
        EWY: 100% 🎉 FREE
        PLTR: 89% ⚡ Near
-[6/6] ✓ @aleabitoreddit: 54 tweets, 40 updated
+[6/6] ✓ X scan: 54 tweets, 40 updated
 ✅ Startup complete (6/6 passed)
 ```
 

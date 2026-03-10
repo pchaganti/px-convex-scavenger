@@ -6,8 +6,8 @@ Updates the watchlist with bullish/bearish signals.
 Uses agent-browser CLI for local browser automation.
 
 Usage:
-    python3 scripts/fetch_x_watchlist.py                    # Default: @aleabitoreddit
-    python3 scripts/fetch_x_watchlist.py --account elonmusk # Custom account
+    python3 scripts/fetch_x_watchlist.py --account USERNAME
+    python3 scripts/fetch_x_watchlist.py --account USERNAME --hours 48
     python3 scripts/fetch_x_watchlist.py --hours 48         # Look back 48 hours
 """
 
@@ -27,7 +27,7 @@ PROJECT_ROOT = Path(__file__).parent.parent
 
 # Known ticker patterns
 COMMON_TICKERS = {
-    # Semiconductors (aleabitoreddit focus)
+    # Semiconductors
     "ON", "POWI", "SLAB", "ALGM", "VECO", "PLAB", "RMBS", "LASR", "MPWR", "COHR",
     "NVDA", "AMD", "INTC", "MU", "AVGO", "QCOM", "TSM", "ASML", "LRCX", "AMAT",
     "KLAC", "MRVL", "ADI", "TXN", "NXPI", "SWKS", "QRVO", "MCHP", "WOLF", "CRUS",
@@ -388,7 +388,7 @@ def print_summary(account: str, tweets: List[Dict]):
 
 def main():
     parser = argparse.ArgumentParser(description="Fetch X account tweets and extract ticker sentiment")
-    parser.add_argument("--account", "-a", default="aleabitoreddit", 
+    parser.add_argument("--account", "-a", required=True,
                         help="X account to scan (without @)")
     parser.add_argument("--hours", "-t", type=int, default=24,
                         help="Hours to look back (default: 24)")

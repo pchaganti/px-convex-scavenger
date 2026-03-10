@@ -4,8 +4,8 @@ Fetch tweets from X accounts using xAI's live search API.
 Much more reliable than browser scraping.
 
 Usage:
-    python3 scripts/fetch_x_xai.py                         # Default: @aleabitoreddit
-    python3 scripts/fetch_x_xai.py --account elonmusk      # Custom account
+    python3 scripts/fetch_x_xai.py --account USERNAME
+    python3 scripts/fetch_x_xai.py --account USERNAME --days 7
     python3 scripts/fetch_x_xai.py --days 7                # Look back 7 days
     python3 scripts/fetch_x_xai.py --dry-run               # Don't update watchlist
 """
@@ -446,7 +446,7 @@ def print_summary(account: str, tweets: List[Dict], raw_response: Dict = None):
 
 def main():
     parser = argparse.ArgumentParser(description="Fetch X account tweets via xAI API")
-    parser.add_argument("--account", "-a", default="aleabitoreddit", 
+    parser.add_argument("--account", "-a", required=True,
                         help="X account to scan (without @)")
     parser.add_argument("--days", "-d", type=int, default=3,
                         help="Days to look back (default: 3)")
