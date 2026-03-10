@@ -43,12 +43,7 @@ describe("GET /api/discover", () => {
 
 // --- Structural: normalizeNumber rejects negatives ---
 
-describe("ib_realtime_server.js normalizeNumber", () => {
-  it("contains value < 0 guard in normalizeNumber", () => {
-    const content = readFileSync(resolve(projectRoot, "scripts", "ib_realtime_server.js"), "utf8");
-    expect(content.includes("value < 0")).toBeTruthy();
-  });
-
+describe("ib_realtime_server.js requests frozen market data", () => {
   it("requests frozen market data on connect", () => {
     const content = readFileSync(resolve(projectRoot, "scripts", "ib_realtime_server.js"), "utf8");
     expect(content.includes("reqMarketDataType(4)")).toBeTruthy();

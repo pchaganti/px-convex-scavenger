@@ -4,6 +4,7 @@
 2026-03-08T20:30:00-07:00
 
 ## Recent Commits
+- 2026-03-09 19:30:00 -0700 — **feat: Upgrade to Next.js 15, React 19, implement Zustand for decoupled state, direct WS snapshots, and UI Skeletons**
 - 2026-03-08 20:30:00 -0700 — **feat: Scenario stress test — interactive `stress-test` command with β-SPX/oil/VIX crash-beta pricing engine, BSM IV expansion, expandable ▶ detail rows per position, HTML template**
 - 2026-03-08 12:00:00 -0700 — **feat: CRI Scan launchd service — automated every 30 min (4:05 AM–8 PM ET, Mon-Fri trading days), stale-while-revalidate API route (1 min TTL)**
 - 2026-03-07 21:33:00 -0700 — **feat: Add IBC Gateway setup script — automated IB Gateway management via launchd (Mon-Fri auto-start, daily restart, 2FA handling, dialog suppression)**

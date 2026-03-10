@@ -1,7 +1,7 @@
 {
   "ticker": "ETHA",
   "profile_expires": null,
-  "stats_expires": "2026-03-10T14:18:05.940Z",
+  "stats_expires": "2026-03-11T02:30:07.421Z",
   "uw_info": {
     "symbol": "ETHA",
     "logo": "https://storage.googleapis.com/uwassets/logos/placeholder.png",
@@ -24,17 +24,17 @@
     "has_earnings_history": false
   },
   "stock_state": {
-    "close": "15.3",
-    "high": "15.3399",
-    "low": "15.155",
-    "open": "15.23",
-    "volume": 8233223,
-    "market_time": "regular",
-    "tape_time": "2026-03-09T14:18:05Z",
-    "total_volume": 10741749,
-    "prev_close": "15.24"
+    "close": "15.0426",
+    "high": "15.39",
+    "low": "15.03",
+    "open": "15.37",
+    "volume": 1713352,
+    "tape_time": "2026-03-09T23:58:57Z",
+    "market_time": "postmarket",
+    "total_volume": 38693613,
+    "prev_close": "15.37"
   },
   "exa_profile": {},
   "exa_stats": {},
-  "fetched_at": "2026-03-09T14:18:05.940Z"
+  "fetched_at": "2026-03-10T02:30:07.421Z"
 }

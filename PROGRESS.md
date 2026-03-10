@@ -4,7 +4,22 @@
 
 ### Changes Made
 
-#### 1. Bug Fix Workflow — TDD + E2E mandatory
+#### 1. Next.js 15 Upgrade & UI Architecture Overhaul
+**Files**: `web/package.json`, `web/next.config.mjs`, `web/components/WorkspaceSections.tsx`, `web/components/ui/Skeleton.tsx`, `web/lib/store.ts`
+
+- Upgraded Next.js to v15.3.2 (with Turbopack) and React to v19.0.0.
+- Replaced the slugggish `POST /api/prices` proxy with a direct client-to-server WebSocket snapshot connection in `usePrices.ts`, drastically improving initial TTFB and layout rendering.
+- De-coupled the monolithic global React Contexts (`OrderActionsContext`, `TickerDetailContext`) by implementing a lightweight `Zustand` store for UI state management. This eliminates full-page re-renders when deep UI state (like opening a ticker modal) changes.
+- Implemented a standard UI `Skeleton` and `TableSkeleton` for loading states on tables (Blotter, Journal, Orders), preventing jarring layout shifts during initial fetches or IB background syncs.
+
+#### 2. E2E Browser Automation shifted from Puppeteer to Playwright
+**Files**: `web/package.json`, `web/e2e/prices-performance.test.js`, Memory
+
+- Enforced rule to exclusively use Playwright for browser automation.
+- Re-wrote performance evaluation tests to use Playwright's `chromium` engine instead of Puppeteer.
+- E2E tests verified the newly implemented direct WebSocket connection resolves data and renders the WorkspaceShell without sluggishness.
+
+#### 3. Bug Fix Workflow — TDD + E2E mandatory
 **Files**: `CLAUDE.md`, `.pi/AGENTS.md`, `~/.claude/CLAUDE.md`
 
 Established permanent rule: all bug fixes require red/green TDD (failing test first, then fix, then green). UI bugs additionally require a Playwright E2E test for confirmation. Updated all three instruction files.

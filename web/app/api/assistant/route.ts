@@ -35,7 +35,7 @@ const SYSTEM_PROMPT =
   "Always respond in short, decisive blocks using signal, structure, kelly logic, and final decision. " +
   "If confidence is low, explicitly state uncertainty and recommend next command or additional data.";
 
-const isMockMode = () => process.env.ASSISTANT_MOCK === "1" || process.env.NODE_ENV === "test";
+const isMockMode = () => process.env.ASSISTANT_MOCK === "1" || (process.env.NODE_ENV === "test" && process.env.ASSISTANT_MOCK !== "0");
 
 const ANTHROPIC_ENV_KEYS = ["ANTHROPIC_API_KEY", "CLAUDE_CODE_API_KEY", "CLAUDE_API_KEY"];
 const resolveApiKey = () => {

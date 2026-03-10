@@ -198,29 +198,54 @@ export function usePrices(options: UsePricesOptions): UsePricesReturn {
       return {};
     }
 
-    try {
-      const response = await fetch("/api/prices", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ symbols: symbolsToRequest }),
-      });
+    return new Promise<Record<string, PriceData>>((resolve, reject) => {
+      const ws = new WebSocket(socketUrl);
+      const results: Record<string, PriceData> = {};
+      const pending = new Set(symbolsToRequest);
+      
+      const timeout = setTimeout(() => {
+        ws.close();
+        resolve(results);
+      }, 5000);
 
-      const body = (await response.json()) as {
-        prices?: Record<string, PriceData>;
-        error?: string;
+      ws.onopen = () => {
+        ws.send(JSON.stringify({ action: "snapshot", symbols: symbolsToRequest }));
       };
 
-      if (!response.ok) {
-        throw new Error(body.error ?? "Failed to get snapshot");
-      }
+      ws.onmessage = (event) => {
+        try {
+          const message = JSON.parse(event.data as string) as WSMessage;
+          if (message.type === "snapshot") {
+            const symbol = message.data.symbol.toUpperCase();
+            results[symbol] = message.data;
+            pending.delete(symbol);
+            
+            if (pending.size === 0) {
+              clearTimeout(timeout);
+              ws.close();
+              resolve(results);
+            }
+          } else if (message.type === "error") {
+            clearTimeout(timeout);
+            ws.close();
+            reject(new Error(message.message));
+          }
+        } catch (e) {
+          console.error("Failed to parse message:", e);
+        }
+      };
 
-      return body.prices ?? {};
-    } catch (error_) {
+      ws.onerror = () => {
+        clearTimeout(timeout);
+        ws.close();
+        reject(new Error("Failed to connect to price server"));
+      };
+    }).catch((error_) => {
       setError(error_ instanceof Error ? error_.message : "Failed to get snapshot");
       console.error("Snapshot error:", error_);
       return {};
-    }
-  }, []);
+    });
+  }, [socketUrl]);
 
   useEffect(() => {
     mountedRef.current = true;

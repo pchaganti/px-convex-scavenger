@@ -1,5 +1,21 @@
 # CONVEX SCAVENGER — CLAUDE.md
 
+## ⛔ Mandatory Rules — Every Session, No Exceptions
+
+These rules apply to ALL work in this project. Violating any rule is a blocking failure.
+
+1. **Be concise.** Get straight to the point. No preamble, no filler, no restating what was asked. Long output only when explicitly requested.
+
+2. **E2E browser verification for ALL UI work.** Any change touching UI code (components, styles, layouts, modals, tooltips, charts) MUST be verified with Playwright end-to-end browser automation before marking complete. Playwright is installed at `@playwright/test` in `web/`. Config: `web/playwright.config.ts`. No UI change is done until visually confirmed in a real browser.
+
+3. **Red/green TDD for ALL code.** Every bug fix, feature, and refactor follows test-driven development: write a failing test first (red), implement the fix (green), then refactor. No exceptions. Unit tests via Vitest, E2E via Playwright.
+
+4. **95% test coverage target.** Always create, update, or delete tests (unit, integration, E2E) to maintain ≥95% coverage. Every PR-worthy change must include corresponding tests.
+
+5. **API keys.** Project API keys live in `.env` files (see Credentials Architecture below). If a key is missing from `.env`, check `~/.zshrc` as a fallback source.
+
+---
+
 ## Identity
 
 Autonomous options, equities and futures trading platform for any size account. Detects institutional positioning via dark pool/OTC flow, constructs convex options structures, sizes with fractional Kelly. **No narrative trades. No TA trades. Flow signal or nothing.**

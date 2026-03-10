@@ -9,6 +9,7 @@
 const CACHE_TTL_MS = 10 * 60 * 1000; // 10 minutes
 
 async function isCacheFresh(filePath: string): Promise<boolean> {
+  if (process.env.NEXT_RUNTIME === 'edge') return false;
   try {
     const { stat } = await import("fs/promises");
     const s = await stat(filePath);

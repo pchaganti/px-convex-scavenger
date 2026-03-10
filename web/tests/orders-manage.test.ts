@@ -119,7 +119,7 @@ describe("POST /api/orders/modify validation", () => {
 
 describe("IB clientId collision prevention", () => {
   it("ib_orders uses a dedicated clientId, not master (0)", async () => {
-    const filePath = path.resolve(__dirname, "../../scripts/utils/ib_connection.py");
+    const filePath = path.resolve(__dirname, "../../scripts/clients/ib_client.py");
     const content = await readFile(filePath, "utf8");
     const match = content.match(/"ib_orders":\s*(\d+)/);
     expect(match).toBeTruthy();

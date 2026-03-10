@@ -31,6 +31,7 @@ import { useSort, type SortDirection } from "@/lib/useSort";
 import { useTickerDetail } from "@/lib/TickerDetailContext";
 import { fmtPrice, fmtUsd, legPriceKey } from "@/lib/positionUtils";
 import PositionTable from "./PositionTable";
+import { TableSkeleton } from "@/components/ui/Skeleton";
 import CancelOrderDialog from "./CancelOrderDialog";
 import ModifyOrderModal from "./ModifyOrderModal";
 import RegimePanel from "./RegimePanel";
@@ -623,11 +624,21 @@ function DiscoverSections() {
 }
 
 function JournalSections() {
-  const { data, loading, error } = useJournal();
+  const { data, loading, error, syncWithIB, syncing, lastSyncResult } = useJournal();
+  const [syncError, setSyncError] = useState<string | null>(null);
   const trades = useMemo(() => {
     if (!data?.trades) return [];
     return [...data.trades].sort((a, b) => b.id - a.id);
   }, [data]);
+
+  const handleSync = useCallback(async () => {
+    setSyncError(null);
+    try {
+      await syncWithIB();
+    } catch (e) {
+      setSyncError(e instanceof Error ? e.message : "Sync failed");
+    }
+  }, [syncWithIB]);
 
   const fmtJournalUsd = (v: number | undefined | null) => {
     if (v == null) return "—";
@@ -640,6 +651,7 @@ function JournalSections() {
     if (d === "EXECUTED" || d === "OPEN") return "bullish";
     if (d === "CLOSED") return "neutral";
     if (d === "FREED" || d === "CONVERTED") return "lean-bullish";
+    if (d === "IB_AUTO_IMPORT") return "ib-import";
     return "bearish";
   };
 
@@ -657,10 +669,28 @@ function JournalSections() {
             Trade Journal
             <InfoTooltip text={SECTION_TOOLTIPS["Trade Journal"]} />
           </div>
-          <span className="pill defined">{trades.length} TRADES</span>
+          <div style={{ display: "flex", alignItems: "center", gap: "8px" }}>
+            <button
+              className="btn-sync"
+              onClick={handleSync}
+              disabled={syncing}
+              title="Sync unreconciled IB trades into journal"
+            >
+              {syncing ? "SYNCING..." : "SYNC IB"}
+            </button>
+            {lastSyncResult && (
+              <span className="pill defined" style={{ fontSize: "9px" }}>
+                {lastSyncResult.imported > 0
+                  ? `+${lastSyncResult.imported} IMPORTED`
+                  : "UP TO DATE"}
+              </span>
+            )}
+            <span className="pill defined">{trades.length} TRADES</span>
+          </div>
         </div>
         {error && <div className="section-body"><div className="alert-item bearish">{error}</div></div>}
-        {loading && <div className="section-body"><div className="alert-item">Loading journal...</div></div>}
+        {syncError && <div className="section-body"><div className="alert-item bearish">IB Sync: {syncError}</div></div>}
+        {loading && <div className="section-body p-6"><TableSkeleton rows={4} columns={6} /></div>}
         {!loading && trades.length === 0 && !error && (
           <div className="section-body"><div className="alert-item">No trades in journal.</div></div>
         )}
@@ -1157,7 +1187,7 @@ function HistoricalTradesSection() {
       </div>
       <div className="section-body">
         {error && <div className="alert-item section-message bearish">{error}</div>}
-        {loading && <div className="alert-item section-message">Loading historical trades...</div>}
+        {loading && <div className="p-6"><TableSkeleton rows={5} columns={8} /></div>}
         {!loading && !hasData && !error && (
           <div className="alert-item section-message">No historical trades. Click REFRESH to fetch from IB.</div>
         )}

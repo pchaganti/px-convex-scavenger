@@ -1,7 +1,7 @@
 {
   "ticker": "AAPL",
   "profile_expires": null,
-  "stats_expires": "2026-03-10T14:09:07.449Z",
+  "stats_expires": "2026-03-11T02:29:32.243Z",
   "uw_info": {
     "symbol": "AAPL",
     "logo": "https://storage.googleapis.com/uwassets/logos/AAPL.png",
@@ -23,18 +23,8 @@
     "has_dividend": true,
     "has_earnings_history": true
   },
-  "stock_state": {
-    "close": "255.66",
-    "high": "257.0199",
-    "low": "253.6805",
-    "open": "255.6",
-    "volume": 5463410,
-    "market_time": "regular",
-    "tape_time": "2026-03-09T14:09:05Z",
-    "total_volume": 5840039,
-    "prev_close": "255.38"
-  },
+  "stock_state": {},
   "exa_profile": {},
   "exa_stats": {},
-  "fetched_at": "2026-03-09T14:09:07.449Z"
+  "fetched_at": "2026-03-10T02:29:32.243Z"
 }

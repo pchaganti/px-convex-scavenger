@@ -144,7 +144,7 @@ test("GET /api/prices returns deprecation response", async () => {
   expect(body.error!.includes("deprecated")).toBeTruthy();
 });
 
-test("POST /api/prices requires symbols payload", async () => {
+test("POST /api/prices returns deprecation response", async () => {
   const { POST } = await import("../app/api/prices/route");
   const request = new NextRequest("http://localhost/api/prices", {
     method: "POST",
@@ -155,6 +155,6 @@ test("POST /api/prices requires symbols payload", async () => {
   const response = await POST(request);
   const body = await response.json() as { error?: string };
 
-  expect(response.status).toBe(400);
-  expect(body.error).toBe("symbols array required");
+  expect(response.status).toBe(405);
+  expect(body.error).toContain("deprecated");
 });

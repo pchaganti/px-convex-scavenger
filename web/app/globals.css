@@ -96,7 +96,7 @@
 
 html,
 body,
-:global(#__next) {
+#__next {
   height: 100%;
 }
 
@@ -1165,6 +1165,29 @@ td.negative, .negative {
 .bullish { color: var(--positive); }
 .bearish { color: var(--negative); }
 .lean-bullish { color: var(--positive); opacity: 0.7; }
+.ib-import { color: var(--informational, #3b82f6); }
+
+/* ── Sync button (journal IB sync) ── */
+.btn-sync {
+  font-family: var(--font-mono);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--informational, #3b82f6);
+  background: transparent;
+  border: 1px solid var(--informational, #3b82f6);
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+.btn-sync:hover:not(:disabled) {
+  background: rgba(59, 130, 246, 0.1);
+}
+.btn-sync:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
 
 /* ── Cell utility classes ── */
 
